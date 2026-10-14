@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { getStatsHistory } from "../lib/ipc";
 import { useAppStore } from "../store/app";
 
@@ -89,6 +89,68 @@ const streak = computed(() => {
   return n;
 });
 
+// ---- 休息计划（从宠物页迁入） ----
+const plan = ref(null);
+const rangeError = ref("");
+
+function normalizeRanges(list) {
+  const valid = (Array.isArray(list) ? list : [])
+    .filter((r) => r?.start && r?.end && r.start < r.end)
+    .map((r) => ({ ...r }));
+  return valid.length ? valid : [{ start: "09:00", end: "18:00" }];
+}
+
+watch(
+  () => store.config,
+  (c) => {
+    if (!c) return;
+    plan.value = {
+      workMinutes: c.workMinutes,
+      shortRestMinutes: c.shortRestMinutes,
+      longRestEvery: c.longRestEvery,
+      longRestMinutes: c.longRestMinutes,
+      idlePauseMinutes: c.idlePauseMinutes,
+      workScheduleEnabled: c.workScheduleEnabled ?? false,
+      workRanges: normalizeRanges(c.workRanges),
+    };
+  },
+  { immediate: true },
+);
+
+function setRangeStart(i, e) {
+  const v = e.target.value;
+  if (!v) return;
+  const r = plan.value.workRanges[i];
+  if (r.end && v >= r.end) {
+    rangeError.value = "结束时间需晚于开始时间，暂不支持跨午夜";
+    return;
+  }
+  rangeError.value = "";
+  plan.value.workRanges = plan.value.workRanges.map((x, j) => (j === i ? { ...x, start: v } : x));
+}
+function setRangeEnd(i, e) {
+  const v = e.target.value;
+  if (!v) return;
+  const r = plan.value.workRanges[i];
+  if (r.start && v <= r.start) {
+    rangeError.value = "结束时间需晚于开始时间，暂不支持跨午夜";
+    return;
+  }
+  rangeError.value = "";
+  plan.value.workRanges = plan.value.workRanges.map((x, j) => (j === i ? { ...x, end: v } : x));
+}
+function addRange() {
+  if (rangeError.value) return; // 还有非法时间段时不允许继续加
+  plan.value.workRanges = [...plan.value.workRanges, { start: "14:00", end: "18:00" }];
+}
+function dropRange(i) {
+  if (plan.value.workRanges.length <= 1) return;
+  plan.value.workRanges = plan.value.workRanges.filter((_, j) => j !== i);
+}
+async function savePlan() {
+  if (plan.value) await store.patchConfig({ ...plan.value });
+}
+
 const sum = (key) => history.value.reduce((acc, row) => acc + (row[key] ?? 0), 0);
 const weekWork = computed(() => sum("workSeconds"));
 const weekDone = computed(() => sum("restCompleted"));
@@ -133,6 +195,114 @@ const weekSkipped = computed(() => sum("restSkipped"));
       </div>
       <div v-if="hasData" class="legend">柱高为当天工作时长，数字是完成的休息次数</div>
     </section>
+
+    <section v-if="plan" class="plan">
+      <div class="section-title plan-title">休息计划</div>
+
+      <div class="plan-card">
+        <div class="row between">
+          <div>
+            <div class="switch-title">只在工作时间段提醒</div>
+            <div class="hint">段内才计时，段外倒计时清零；到点的休息不打断，自然结束</div>
+          </div>
+          <n-switch
+            :value="plan.workScheduleEnabled"
+            @update:value="(v) => (plan.workScheduleEnabled = v)"
+          />
+        </div>
+
+        <template v-if="plan.workScheduleEnabled">
+          <div v-for="(r, i) in plan.workRanges" :key="i" class="time-row">
+            <label>
+              开始
+              <input type="time" :value="r.start" @change="setRangeStart(i, $event)" />
+            </label>
+            <span>至</span>
+            <label>
+              结束
+              <input type="time" :value="r.end" @change="setRangeEnd(i, $event)" />
+            </label>
+            <button
+              class="range-drop"
+              type="button"
+              title="删除这一段"
+              :disabled="plan.workRanges.length <= 1"
+              @click="dropRange(i)"
+            >
+              ×
+            </button>
+          </div>
+          <button
+            class="range-add"
+            type="button"
+            :disabled="!!rangeError"
+            @click="addRange"
+          >
+            + 再加一段
+          </button>
+          <div v-if="rangeError" class="range-error">{{ rangeError }}</div>
+          <div class="hint range-hint">可分上下午多段，例如 9:00-12:00、13:00-18:00。不支持跨午夜。</div>
+        </template>
+
+        <div class="row">
+          <span class="row-label">工作间隔</span>
+          <n-slider
+            v-model:value="plan.workMinutes"
+            :min="5"
+            :max="180"
+            :step="5"
+            style="flex: 1"
+          />
+          <span class="row-value">{{ plan.workMinutes }} 分钟</span>
+        </div>
+        <div class="row">
+          <span class="row-label">短休息</span>
+          <n-slider
+            v-model:value="plan.shortRestMinutes"
+            :min="1"
+            :max="30"
+            :step="1"
+            style="flex: 1"
+          />
+          <span class="row-value">{{ plan.shortRestMinutes }} 分钟</span>
+        </div>
+        <div class="row">
+          <span class="row-label">长休触发</span>
+          <n-slider
+            v-model:value="plan.longRestEvery"
+            :min="1"
+            :max="10"
+            :step="1"
+            style="flex: 1"
+          />
+          <span class="row-value">{{ plan.longRestEvery }} 次后</span>
+        </div>
+        <div class="row">
+          <span class="row-label">长休息</span>
+          <n-slider
+            v-model:value="plan.longRestMinutes"
+            :min="5"
+            :max="60"
+            :step="5"
+            style="flex: 1"
+          />
+          <span class="row-value">{{ plan.longRestMinutes }} 分钟</span>
+        </div>
+        <div class="row">
+          <span class="row-label">离开暂停</span>
+          <n-slider
+            v-model:value="plan.idlePauseMinutes"
+            :min="1"
+            :max="30"
+            :step="1"
+            style="flex: 1"
+          />
+          <span class="row-value">{{ plan.idlePauseMinutes }} 分钟</span>
+        </div>
+
+        <n-button type="primary" @click="savePlan">保存</n-button>
+      </div>
+    </section>
   </div>
 </template>
 <style scoped>
@@ -160,4 +330,22 @@ const weekSkipped = computed(() => sum("restSkipped"));
 .empty,.legend{font-size:11px;color:var(--muted);line-height:1.6}
 .empty{padding:16px 12px;border:1px dashed var(--border);border-radius:14px;text-align:center}
 .legend{margin-top:4px}
+/* 休息计划（从宠物页迁入） */
+.plan{margin-top:18px}
+.plan-title{margin-bottom:10px}
+.plan-card{padding:14px 12px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.row{display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:12px}
+.row.between{justify-content:space-between;align-items:flex-start;margin-bottom:12px}
+.row-label{width:58px;flex:none}
+.row-value{width:58px;flex:none;text-align:right;color:var(--muted);font-variant-numeric:tabular-nums}
+.switch-title{font-size:13px;font-weight:700}
+.hint{margin-top:3px;font-size:11px;color:var(--muted);line-height:1.5}
+.range-hint{margin:-4px 0 10px}
+.time-row{display:flex;align-items:center;gap:10px;margin-bottom:8px;font-size:12px;color:var(--muted)}
+.time-row input{margin-left:6px;padding:4px 8px;border:1px solid var(--border);border-radius:8px;background:var(--key-bg);color:var(--ink);font-size:12px}
+.range-drop{width:24px;height:24px;padding:0;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--muted);cursor:pointer;line-height:1}
+.range-drop:disabled{opacity:.4;cursor:default}
+.range-add{margin:0 0 8px;padding:4px 10px;border:1px dashed var(--border);border-radius:8px;background:transparent;color:var(--muted);font-size:12px;cursor:pointer}
+.range-add:disabled{opacity:.5;cursor:default}
+.range-error{margin:-4px 0 8px;font-size:11px;color:#e57373}
 </style>

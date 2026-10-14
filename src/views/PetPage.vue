@@ -15,45 +15,6 @@ const previewVideo = ref(null);
 const strategy = computed(() => draft.value?.animalStrategy ?? "random");
 const presence = computed(() => draft.value?.restPresence ?? "accompany");
 
-// ---- 工作时间段（休息计划只在段内执行） ----
-const rangeError = ref("");
-function normalizeRanges(list) {
-  const valid = (Array.isArray(list) ? list : [])
-    .filter((r) => r?.start && r?.end && r.start < r.end)
-    .map((r) => ({ ...r }));
-  return valid.length ? valid : [{ start: "09:00", end: "18:00" }];
-}
-function setRangeStart(i, e) {
-  const v = e.target.value;
-  if (!v) return;
-  const r = draft.value.workRanges[i];
-  if (r.end && v >= r.end) {
-    rangeError.value = "结束时间需晚于开始时间，暂不支持跨午夜";
-    return;
-  }
-  rangeError.value = "";
-  draft.value.workRanges = draft.value.workRanges.map((x, j) => (j === i ? { ...x, start: v } : x));
-}
-function setRangeEnd(i, e) {
-  const v = e.target.value;
-  if (!v) return;
-  const r = draft.value.workRanges[i];
-  if (r.start && v <= r.start) {
-    rangeError.value = "结束时间需晚于开始时间，暂不支持跨午夜";
-    return;
-  }
-  rangeError.value = "";
-  draft.value.workRanges = draft.value.workRanges.map((x, j) => (j === i ? { ...x, end: v } : x));
-}
-function addRange() {
-  if (rangeError.value) return; // 还有非法时间段时不允许继续加
-  draft.value.workRanges = [...draft.value.workRanges, { start: "14:00", end: "18:00" }];
-}
-function dropRange(i) {
-  if (draft.value.workRanges.length <= 1) return;
-  draft.value.workRanges = draft.value.workRanges.filter((_, j) => j !== i);
-}
-
 const syncNotice = computed(() => {
   if (store.petSync === "fetching") return { title: "还有几只在路上", desc: "它们会自己过来，不用管" };
   if (store.petSync === "failed")
@@ -70,14 +31,7 @@ const PRESENCES = [
 watch(
   () => store.config,
   (c) => {
-    if (c) {
-      draft.value = {
-        ...c,
-        enabledSpecies: [...c.enabledSpecies],
-        workScheduleEnabled: c.workScheduleEnabled ?? false,
-        workRanges: normalizeRanges(c.workRanges),
-      };
-    }
+    if (c) draft.value = { ...c, enabledSpecies: [...c.enabledSpecies] };
   },
   { immediate: true },
 );
@@ -231,108 +185,6 @@ async function save() {
         </div>
       </section>
 
-      <section class="block">
-        <div class="title">休息计划</div>
-        <div class="row between schedule-switch">
-          <div>
-            <div class="switch-title">只在工作时间段提醒</div>
-            <div class="hint">段内才计时，段外倒计时清零；到点的休息不打断，自然结束</div>
-          </div>
-          <n-switch
-            :value="draft.workScheduleEnabled"
-            @update:value="(v) => (draft.workScheduleEnabled = v)"
-          />
-        </div>
-        <template v-if="draft.workScheduleEnabled">
-          <div v-for="(r, i) in draft.workRanges" :key="i" class="time-row">
-            <label>
-              开始
-              <input type="time" :value="r.start" @change="setRangeStart(i, $event)" />
-            </label>
-            <span>至</span>
-            <label>
-              结束
-              <input type="time" :value="r.end" @change="setRangeEnd(i, $event)" />
-            </label>
-            <button
-              class="range-drop"
-              type="button"
-              title="删除这一段"
-              :disabled="draft.workRanges.length <= 1"
-              @click="dropRange(i)"
-            >
-              ×
-            </button>
-          </div>
-          <button
-            class="range-add"
-            type="button"
-            :disabled="!!rangeError"
-            @click="addRange"
-          >
-            + 再加一段
-          </button>
-          <div v-if="rangeError" class="range-error">{{ rangeError }}</div>
-          <div class="hint">可分上下午多段，例如 9:00-12:00、13:00-18:00。不支持跨午夜。</div>
-        </template>
-        <div class="row">
-          <span class="row-label">工作间隔</span>
-          <n-slider
-            v-model:value="draft.workMinutes"
-            :min="5"
-            :max="180"
-            :step="5"
-            style="flex: 1"
-          />
-          <span class="row-value">{{ draft.workMinutes }} 分钟</span>
-        </div>
-        <div class="row">
-          <span class="row-label">短休息</span>
-          <n-slider
-            v-model:value="draft.shortRestMinutes"
-            :min="1"
-            :max="30"
-            :step="1"
-            style="flex: 1"
-          />
-          <span class="row-value">{{ draft.shortRestMinutes }} 分钟</span>
-        </div>
-        <div class="row">
-          <span class="row-label">长休触发</span>
-          <n-slider
-            v-model:value="draft.longRestEvery"
-            :min="1"
-            :max="10"
-            :step="1"
-            style="flex: 1"
-          />
-          <span class="row-value">{{ draft.longRestEvery }} 次后</span>
-        </div>
-        <div class="row">
-          <span class="row-label">长休息</span>
-          <n-slider
-            v-model:value="draft.longRestMinutes"
-            :min="5"
-            :max="60"
-            :step="5"
-            style="flex: 1"
-          />
-          <span class="row-value">{{ draft.longRestMinutes }} 分钟</span>
-        </div>
-        <div class="row">
-          <span class="row-label">离开暂停</span>
-          <n-slider
-            v-model:value="draft.idlePauseMinutes"
-            :min="1"
-            :max="30"
-            :step="1"
-            style="flex: 1"
-          />
-          <span class="row-value">{{ draft.idlePauseMinutes }} 分钟</span>
-        </div>
-      </section>
-
-      <n-button type="primary" @click="save">保存</n-button>
     </template>
 
     <n-modal v-model:show="previewOpen">
@@ -382,17 +234,7 @@ async function save() {
 .presence-name{font-size:13px;font-weight:700}
 .presence-desc{margin-top:2px;font-size:11px;color:var(--muted)}
 .switch-title{font-size:13px;font-weight:700}
-.schedule-switch{align-items:flex-start}
-.time-row{display:flex;align-items:center;gap:10px;margin-bottom:8px;font-size:12px;color:var(--muted)}
-.time-row input{margin-left:6px;padding:4px 8px;border:1px solid var(--border);border-radius:8px;background:var(--key-bg);color:var(--ink);font-size:12px}
-.range-drop{width:24px;height:24px;padding:0;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--muted);cursor:pointer;line-height:1}
-.range-drop:disabled{opacity:.4;cursor:default}
-.range-add{margin:0 0 8px;padding:4px 10px;border:1px dashed var(--border);border-radius:8px;background:transparent;color:var(--muted);font-size:12px;cursor:pointer}
-.range-add:disabled{opacity:.5;cursor:default}
-.range-error{margin:-4px 0 8px;font-size:11px;color:#e57373}
 .row{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:12px}
-.row-label{width:58px;flex:none}
-.row-value{width:58px;flex:none;text-align:right;color:var(--muted);font-variant-numeric:tabular-nums}
 .row.between{justify-content:space-between}
 .preview{position:relative;width:min(640px,82vw);height:min(480px,70vh);display:grid;place-items:center;border-radius:20px;background:#05100feb;overflow:hidden}
 .preview video{width:100%;height:100%;object-fit:contain}
