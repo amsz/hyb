@@ -18,6 +18,11 @@ path = "src/main.rs"
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
+# Tauri 只在开启 `custom-protocol` 时才把前端内嵌进 exe（tauri-macros: dev = cfg!(not(feature = "custom-protocol"))）。
+# `tauri build` 会自动加；裸 `cargo build --release` 必须显式带上，否则 exe 会去连 devUrl（localhost:1420）。
+[features]
+custom-protocol = ["tauri/custom-protocol"]
+
 [dependencies]
 tauri = { version = "2.11.5", features = ["tray-icon", "image-png", "image-ico", "protocol-asset"] }
 tauri-plugin-log = "2.9.1"

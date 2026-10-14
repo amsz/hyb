@@ -48,23 +48,32 @@ huyanbao-rebuild/
 
 ```bash
 npm install
-npm run build       # ✅ 已验证：2697 modules，产出 dist/ 约 1.6MB
+npm run build          # 前端 → dist/（release 构建会把它内嵌进 exe）
 
-# 后端（Windows/MSVC）
-check.bat           # = cargo check   ✅ 0 error / 0 warning
-cargo-env.bat build # = cargo build   ✅ target/debug/huyanbao.exe 30.2MB
-npm run tauri dev   # 开发
-npm run tauri build # NSIS / MSI 安装包
+check.bat              # = cargo check                         ✅ 0 error / 0 warning
+cargo-env.bat build    # = cargo build（debug，连 Vite dev server）
+
+# 打包（推荐）：出可直接运行的 exe + 便携 zip
+powershell -ExecutionPolicy Bypass -File package.ps1
+powershell -ExecutionPolicy Bypass -File package.ps1 -Production   # 正式版配置
+powershell -ExecutionPolicy Bypass -File package.ps1 -Installer    # 额外出 NSIS 安装包
 ```
+
+> ⚠ **`cargo build --release` 必须加 `--features custom-protocol`**，否则 exe 启动后报
+> `ERR_CONNECTION_REFUSED`。原因：`tauri-macros` 里 `dev = cfg!(not(feature = "custom-protocol"))`，
+> 没开这个 feature 就认为是开发模式 → 前端资产表为空 → 退回连 `devUrl`(localhost:1420)。
+> `tauri build` 会自动带上，裸 cargo 必须显式写（`package.ps1` 已带）。
 
 **验证状态**
 
 | 部分 | 状态 |
 |---|---|
-| 前端 `vite build` | ✅ 2697 modules，5 页面 + 3 overlay 全部编译 |
+| 前端 `vite build` | ✅ 2705 modules，5 页面 + 3 overlay 全部编译 |
 | 依赖解析 `Cargo.lock` | ✅ 593 crates |
 | 后端 `cargo check` | ✅ 0 error / 0 warning |
-| 后端 `cargo build` | ✅ `target/debug/huyanbao.exe`（30.2MB，PE32+ x86-64） |
+| 后端 `cargo build`（debug） | ✅ `target/debug/huyanbao.exe` |
+| **打包 `package.ps1`** | ✅ `release/huyanbao-0.1.4-win-x64-portable.zip`（5.9MB，含 SHA256） |
+| **release 独立运行** | ✅ 停掉 Vite 后双击即可：`/assets/` 22 条已内嵌，UI 完整渲染、计时正常 |
 | 链接产物自检 | ✅ 导入表含 `gdi32!SetDeviceGammaRamp`、`user32!SetWindowsHookExW`、`user32!RegisterHotKey`、`user32!GetLastInputInfo`、`shell32!Shell_NotifyIconW`、`shell32!SHQueryUserNotificationState` |
 
 ### 构建环境（本机踩过的坑）
