@@ -1,0 +1,23 @@
+{
+  "$schema": "gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "主窗口与三个 overlay 窗口共用的能力集",
+  "windows": ["main", "filter-overlay", "animal-overlay", "desktop-ear"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-create",
+    "core:window:allow-destroy",
+    "core:window:allow-show",
+    "core:window:allow-hide",
+    "core:window:allow-minimize",
+    "core:window:allow-set-always-on-top",
+    "core:window:allow-set-ignore-cursor-events",
+    "core:window:allow-set-position",
+    "core:window:allow-set-size",
+    "core:window:allow-start-dragging",
+    "core:event:allow-listen",
+    "core:event:allow-emit",
+    "core:app:allow-version",
+    "opener:default"
+  ]
+}

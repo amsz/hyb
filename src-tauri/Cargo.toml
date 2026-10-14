@@ -1,0 +1,56 @@
+[package]
+name = "huyanbao"
+version = "0.1.4"
+description = "护眼宝 - Windows 桌面护眼工具"
+authors = ["HuyanBao Team"]
+edition = "2021"
+rust-version = "1.77"
+
+# 二进制入口；可复用逻辑放在同包的 lib（crate 名 huyanbao_lib，与原包符号一致）
+[lib]
+name = "huyanbao_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "huyanbao"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2.11.5", features = ["tray-icon", "image-png", "image-ico", "protocol-asset"] }
+tauri-plugin-log = "2.9.1"
+tauri-plugin-opener = "2.5.4"
+tauri-plugin-http = "2.5.9"
+tauri-plugin-store = "2"
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+log = "0.4"
+chrono = { version = "0.4.45", features = ["serde"] }
+uuid = { version = "1", features = ["v4"] }
+
+# 网络 / 压缩
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
+futures-util = "0.3"
+
+# Windows 系统能力（色温、全局热键、输入钩子、窗口）
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.58", features = [
+  "Win32_Foundation",
+  "Win32_Graphics_Gdi",
+  "Win32_UI_WindowsAndMessaging",
+  "Win32_UI_ColorSystem",
+  "Win32_UI_Input_KeyboardAndMouse",
+  "Win32_UI_Shell",
+  "Win32_System_Threading",
+  "Win32_System_Registry",
+  "Win32_System_SystemInformation",
+] }
+global-hotkey = "0.6"
+screenshots = "0.8.10"
+image = { version = "0.24.9", default-features = false, features = ["jpeg", "png"] }
+sha2 = "0.10"
+dirs = "5"

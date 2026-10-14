@@ -1,0 +1,19 @@
+# 默认按文本处理并统一换行
+* text=auto eol=lf
+
+# Windows 批处理必须 CRLF，否则 cmd 会报错
+*.bat        text eol=crlf
+*.cmd        text eol=crlf
+
+# PowerShell 脚本保留 LF 即可（pwsh 支持），如需在旧版 ISE 用可改 crlf
+*.ps1        text eol=lf
+
+# 二进制资源不做任何转换
+*.ico        binary
+*.png        binary
+*.webm       binary
+*.jar        binary
+
+# 锁文件按原样提交（可复现构建）
+package-lock.json  text
+Cargo.lock         text
