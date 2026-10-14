@@ -27,6 +27,7 @@ const timerChip = computed(() => {
   const t = store.timer;
   if (!t) return "—";
   if (t.state === "paused") return "已暂停";
+  if (t.state === "outsideSchedule") return "时段外已暂停";
   if (t.state === "animalShowing") {
     return `休息 ${pad(Math.floor(t.restRemainingSecs / 60))}:${pad(t.restRemainingSecs % 60)}`;
   }

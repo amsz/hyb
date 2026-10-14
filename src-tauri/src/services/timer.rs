@@ -11,7 +11,7 @@
 //! 事件：`timer:tick` `rest:start` `rest:end`
 
 use crate::services::{animals, bluelight, windows};
-use crate::state::{lock, Shared, TimerState};
+use crate::state::{in_work_schedule, lock, Shared, TimerState};
 use chrono::{Datelike, Timelike};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
@@ -281,12 +281,25 @@ fn tick(app: &tauri::AppHandle, shared: &Shared) -> Result<(), crate::error::App
         )
     };
 
+    // 工作时间段（休息计划只在段内执行；段外工作计时清零）
+    let in_schedule = {
+        let guard = lock(shared);
+        in_work_schedule(&guard.config, &chrono::Local::now())
+    };
+
     let idle = idle_seconds();
     let idle_paused = idle_limit > 0 && idle >= idle_limit;
 
     let (finished, remaining) = {
         let mut guard = lock(shared);
-        if paused || idle_paused {
+        if paused {
+            // 手动暂停：保留已累计的工作时间，回到段内仍处于暂停态
+            guard.timer.state = "paused".into();
+        } else if !in_schedule {
+            // 段外：倒计时清零，不累计工作时长（休息不可能在段外自动触发）
+            guard.timer.state = "outsideSchedule".into();
+            guard.timer.work_elapsed_secs = 0;
+        } else if idle_paused {
             guard.timer.state = "paused".into();
         } else {
             guard.timer.state = "working".into();
@@ -300,13 +313,15 @@ fn tick(app: &tauri::AppHandle, shared: &Shared) -> Result<(), crate::error::App
         guard.timer.next_rest_in_secs =
             guard.timer.work_target_secs.saturating_sub(guard.timer.work_elapsed_secs);
         let finished =
-            !paused && !idle_paused && guard.timer.work_elapsed_secs >= guard.timer.work_target_secs;
+            !paused && in_schedule && !idle_paused && guard.timer.work_elapsed_secs >= guard.timer.work_target_secs;
         (finished, guard.timer.next_rest_in_secs)
     };
 
-    // 托盘提示：暂停 / 预提醒（preRemind，仅后端，无设置项 UI）/ 恢复默认
+    // 托盘提示：手动暂停 / 段外 / 预提醒（preRemind，仅后端，无设置项 UI）/ 恢复默认
     let title = if paused {
         "护眼宝 - 计时已暂停".to_string()
+    } else if !in_schedule {
+        "护眼宝 - 时段外，计划已暂停".to_string()
     } else if pre_remind && remaining > 0 && remaining <= u64::from(pre_secs) {
         format!("护眼宝 - 距离休息还有 {remaining} 秒")
     } else {

@@ -28,7 +28,7 @@ huyanbao-rebuild/
    └─ src/
       ├─ lib.rs               Builder + setup + 窗口事件
       ├─ commands.rs          全部 IPC 命令
-      ├─ state.rs             AppConfig(44 字段) / DailyStats / EyeState / TimerState
+      ├─ state.rs             AppConfig(44+2 字段) / DailyStats / EyeState / TimerState
       ├─ error.rs
       └─ services/
          ├─ bluelight/        SetDeviceGammaRamp + 蒙层 + 6 个色温预设
@@ -193,7 +193,7 @@ release 下生效 —— 打 `cargo-env.bat build --release` 后就没了。
 |---|---|
 | invoke 命令表（`get_config…run_system_command`） | `src/lib/ipc.js` + `src-tauri/src/commands.rs` |
 | 事件 `timer:tick` `eye:changed` `config:changed` `rest:start/end` `pets:sync/updated` `ear:collapse` `shortcuts:conflict` `config:warnings` | `commands.rs` / `timer.rs` / `petstore.rs` / `shortcuts.rs` |
-| `config.json` 44 字段（configVersion=3） | `state.rs::AppConfig` |
+| `config.json` 44 字段（configVersion=3） | `state.rs::AppConfig`（重建新增 `workScheduleEnabled`/`workRanges` 工作时间段，configVersion=4，原包无此功能） |
 | `history.json` 字段 | `state.rs::DailyStats` |
 | 窗口 label：`main` `filter-overlay` `animal-overlay` `desktop-ear` | `services/windows.rs` |
 | 日志文案 `[bluelight] [rest] [pets] [shortcuts] [updater] [autostart] [activity] [windows] [stats] [startup]` | 各服务中的 `log::info!/warn!` |

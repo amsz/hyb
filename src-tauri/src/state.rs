@@ -29,7 +29,7 @@ pub const IS_DEV: bool = true;
 /// 计划任务名（原包为 `HuyanBao Auto Start`，dev 加后缀避免互相覆盖）
 pub const AUTOSTART_TASK: &str = if IS_DEV { "HuyanBao Dev Auto Start" } else { "HuyanBao Auto Start" };
 
-pub const CONFIG_VERSION: u32 = 3;
+pub const CONFIG_VERSION: u32 = 4;
 
 // ---------------------------------------------------------------- 配置结构
 
@@ -43,6 +43,95 @@ pub struct TimeRange {
 impl Default for TimeRange {
     fn default() -> Self {
         Self { start: "09:00".into(), end: "21:00".into() }
+    }
+}
+
+/// 休息计划默认不启用工作时间段（保持原包行为）
+fn default_work_schedule_enabled() -> bool {
+    false
+}
+
+/// 休息计划默认工作时间段 09:00-18:00
+fn default_work_ranges() -> Vec<TimeRange> {
+    vec![TimeRange { start: "09:00".into(), end: "18:00".into() }]
+}
+
+/// 段外/段内判定：左闭右开 `[start, end)`；`start >= end` 的段视为无效（不支持跨午夜）。
+/// `workScheduleEnabled = false` 时恒为段内；没有有效段时 fail-open 视为段内，
+/// 避免配置异常导致休息计划永远不会触发。
+pub fn in_work_schedule(cfg: &AppConfig, now: &chrono::DateTime<chrono::Local>) -> bool {
+    if !cfg.work_schedule_enabled {
+        return true;
+    }
+    // "HH:MM" 定长零填充，字符串比较即时间比较
+    let now_hm = now.format("%H:%M").to_string();
+    let mut any_valid = false;
+    let inside = cfg.work_ranges.iter().any(|r| {
+        if r.start.is_empty() || r.end.is_empty() || r.start >= r.end {
+            return false; // 无效段（含跨午夜写法）直接跳过
+        }
+        any_valid = true;
+        r.start <= now_hm && now_hm < r.end
+    });
+    inside || !any_valid
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::TimeZone;
+
+    fn cfg(enabled: bool, ranges: &[(&str, &str)]) -> AppConfig {
+        AppConfig {
+            work_schedule_enabled: enabled,
+            work_ranges: ranges
+                .iter()
+                .copied()
+                .map(|(s, e)| TimeRange { start: s.into(), end: e.into() })
+                .collect(),
+            ..AppConfig::default()
+        }
+    }
+
+    fn at(hm: &str) -> chrono::DateTime<chrono::Local> {
+        let (h, m) = hm.split_once(':').unwrap();
+        chrono::Local
+            .with_ymd_and_hms(2024, 5, 1, h.parse().unwrap(), m.parse().unwrap(), 0)
+            .unwrap()
+    }
+
+    #[test]
+    fn disabled_means_always_in_schedule() {
+        assert!(in_work_schedule(&cfg(false, &[]), &at("23:59")));
+    }
+
+    #[test]
+    fn range_is_left_closed_right_open() {
+        let c = cfg(true, &[("09:00", "12:00")]);
+        assert!(!in_work_schedule(&c, &at("08:59")));
+        assert!(in_work_schedule(&c, &at("09:00")));
+        assert!(in_work_schedule(&c, &at("11:59")));
+        assert!(!in_work_schedule(&c, &at("12:00")));
+    }
+
+    #[test]
+    fn any_range_contains_now() {
+        let c = cfg(true, &[("09:00", "12:00"), ("13:00", "18:00")]);
+        assert!(!in_work_schedule(&c, &at("12:30"))); // 午休段外
+        assert!(in_work_schedule(&c, &at("13:00")));
+        assert!(in_work_schedule(&c, &at("17:59")));
+        assert!(!in_work_schedule(&c, &at("18:00")));
+        assert!(!in_work_schedule(&c, &at("05:00")));
+    }
+
+    #[test]
+    fn invalid_or_empty_ranges_fail_open() {
+        // 跨午夜写法（start >= end）视为无效
+        let c = cfg(true, &[("22:00", "02:00")]);
+        assert!(in_work_schedule(&c, &at("23:00")));
+        assert!(in_work_schedule(&c, &at("05:00")));
+        // 空列表同样 fail-open
+        assert!(in_work_schedule(&cfg(true, &[]), &at("05:00")));
     }
 }
 
@@ -66,6 +155,12 @@ pub struct AppConfig {
     pub long_rest_every: u32,
     pub long_rest_minutes: u32,
     pub idle_pause_minutes: u32,
+    /// 只在工作时间段内执行休息计划（段外工作计时清零）
+    #[serde(default = "default_work_schedule_enabled")]
+    pub work_schedule_enabled: bool,
+    /// 工作时间段列表（与 eye_schedule_ranges 独立，互不联动）
+    #[serde(default = "default_work_ranges")]
+    pub work_ranges: Vec<TimeRange>,
     pub pre_remind: bool,
     pub pre_remind_seconds: u32,
     pub sound_enabled: bool,
@@ -121,6 +216,8 @@ impl Default for AppConfig {
             long_rest_every: 2,
             long_rest_minutes: 10,
             idle_pause_minutes: 5,
+            work_schedule_enabled: false,
+            work_ranges: default_work_ranges(),
             pre_remind: false,
             pre_remind_seconds: 30,
             sound_enabled: true,
@@ -177,6 +274,10 @@ impl AppConfig {
                 CONFIG_VERSION
             );
             cfg.config_version = CONFIG_VERSION;
+        }
+        // v4：工作时间段（旧配置缺字段时由 serde default 兜底，这里再保证非空）
+        if cfg.work_ranges.is_empty() {
+            cfg.work_ranges = default_work_ranges();
         }
         cfg
     }
