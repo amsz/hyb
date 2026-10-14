@@ -9,15 +9,15 @@
 //! 日志字面量：`[windows] pet overlay created at <x>,<y> <w>x<h> peek=<bool>`
 //!   `[windows] creating the desktop ear`、`[windows] filter overlay failed: …`
 //!   `[windows] show main failed: …`、`[windows] monitor layout changed, re-placing filter overlay`
-//! 托盘菜单文案：暂停 / 恢复计时、立即休息、打开主界面、退出、增强滤镜、减弱滤镜、开关护眼
+//! 托盘菜单文案：打开主界面、立即休息、退出（右键菜单；左键单击 = 打开主界面）
 
 use crate::services::timer;
 use crate::state::{lock, Shared};
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{
-    menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem},
+    menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::TrayIconBuilder,
-    Emitter, Manager, WebviewUrl, WebviewWindowBuilder,
+    Manager, WebviewUrl, WebviewWindowBuilder,
 };
 
 const FILTER_W: f64 = 640.0;
@@ -369,27 +369,15 @@ pub fn build_tray(app: &tauri::AppHandle, shared: &Shared) -> tauri::Result<()> 
         return Ok(()); // 已创建
     }
 
-    let eye = CheckMenuItem::with_id(
-        app,
-        "toggle-eye",
-        "开关护眼",
-        true,
-        lock(shared).config.eye_enabled,
-        None::<&str>,
-    )?;
-    let pause = MenuItem::with_id(app, "pause", "暂停 / 恢复计时", true, None::<&str>)?;
     let rest = MenuItem::with_id(app, "rest", "立即休息", true, None::<&str>)?;
-    let up = MenuItem::with_id(app, "filter-up", "增强滤镜", true, None::<&str>)?;
-    let down = MenuItem::with_id(app, "filter-down", "减弱滤镜", true, None::<&str>)?;
     let show = MenuItem::with_id(app, "show", "打开主界面", true, None::<&str>)?;
     let sep = PredefinedMenuItem::separator(app)?;
     let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
 
     let menu = Menu::with_items(
         app,
-        // 顺序与原包 rodata 中的字面量顺序一致：
-        // 暂停 / 恢复计时 → 立即休息 → 打开主界面 → 退出 → ─ → 增强滤镜 → 减弱滤镜 → 开关护眼
-        &[&pause, &rest, &show, &quit, &sep, &up, &down, &eye],
+        // 打开主界面 → 立即休息 → ─ → 退出
+        &[&show, &rest, &sep, &quit],
     )?;
 
     let shared_for_tray = shared.clone();
@@ -400,26 +388,7 @@ pub fn build_tray(app: &tauri::AppHandle, shared: &Shared) -> tauri::Result<()> 
         .on_menu_event(move |app, event| {
             let id = event.id().as_ref();
             match id {
-                "toggle-eye" => {
-                    let enabled = { !lock(&shared_for_tray).config.eye_enabled };
-                    crate::commands::internal_set_eye_enabled(app, &shared_for_tray, enabled);
-                }
-                "pause" => {
-                    let paused = {
-                        let mut guard = lock(&shared_for_tray);
-                        guard.config.timer_paused = !guard.config.timer_paused;
-                        guard.config.timer_paused
-                    };
-                    let _ = paused;
-                    let _ = app.emit("config:changed", lock(&shared_for_tray).config.clone());
-                }
                 "rest" => timer::start_now(app, &shared_for_tray),
-                "filter-up" => {
-                    crate::commands::internal_nudge(app, &shared_for_tray, 5);
-                }
-                "filter-down" => {
-                    crate::commands::internal_nudge(app, &shared_for_tray, -5);
-                }
                 "show" => {
                     let _ = show_main(app);
                 }
