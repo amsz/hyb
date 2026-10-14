@@ -204,10 +204,10 @@ function dropRange(i) {
 .page{display:flex;flex-direction:column;gap:16px}
 .ring-wrap{position:relative;width:160px;height:160px;margin:8px auto 4px}
 .ring{width:100%;height:100%;transform:rotate(-90deg)}
-.track{fill:none;stroke:#4db6ac26;stroke-width:10}
-.progress{fill:none;stroke:url(#none);stroke:#26a69a;stroke-width:10;stroke-linecap:round;stroke-dasharray:326.73;transition:stroke-dashoffset .25s ease}
+.track{fill:none;stroke:#b39ddb26;stroke-width:10}
+.progress{fill:none;stroke:url(#none);stroke:#7e57c2;stroke-width:10;stroke-linecap:round;stroke-dasharray:326.73;transition:stroke-dashoffset .25s ease}
 .ring-center{position:absolute;top:0;right:0;bottom:0;left:0;display:grid;place-content:center;text-align:center}
-.percent{font-size:32px;font-weight:700;color:var(--mint-700);line-height:1}
+.percent{font-size:32px;font-weight:700;color:var(--lav-700);line-height:1}
 .status{margin-top:6px;font-size:13px;color:var(--muted)}
 .block{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:14px}
 .label-row{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:8px;font-size:13px;font-weight:600}
@@ -226,5 +226,5 @@ function dropRange(i) {
 .time-row input{margin-left:6px;padding:4px 8px;border:1px solid var(--border);border-radius:8px;background:var(--key-bg);color:var(--ink)}
 .presets{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap}
 .preset{width:28px;height:28px;border-radius:50%;border:2px solid transparent;cursor:pointer;box-shadow:inset 0 0 0 1px #00000014}
-.preset.active{border-color:var(--mint-700);box-shadow:0 0 0 3px #26a69a40}
+.preset.active{border-color:var(--lav-700);box-shadow:0 0 0 3px #7e57c240}
 </style>

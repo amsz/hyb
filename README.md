@@ -19,12 +19,12 @@ huyanbao-rebuild/
 │  ├─ components/             MainLayout / AppIcon / icons.js（图标从原包还原）
 │  ├─ views/                  EyePage HealthPage PetPage SettingsPage AboutPage
 │  ├─ overlays/               FilterOverlay AnimalOverlay EarOverlay
-│  ├─ assets/logo.svg         原包 data-URL 内嵌 logo 还原
+│  ├─ assets/logo.png         标题栏/侧栏/关于页品牌图（与应用图标同图）
 │  └─ styles/app.css          原包 /assets/index-BOpHBnO2.css 还原（去掉 scoped 哈希）
 └─ src-tauri/                 Rust 后端（crate 名 huyanbao_lib，与原包符号一致）
    ├─ tauri.conf.json         identifier=top.huyanbao.desktop
    ├─ capabilities/default.json
-   ├─ icons/icon.ico          从原 exe 的 RT_GROUP_ICON / RT_ICON 还原
+   ├─ icons/icon.ico          应用图标（自定义；原 exe 还原版备份为 icon.original.ico）
    └─ src/
       ├─ lib.rs               Builder + setup + 窗口事件
       ├─ commands.rs          全部 IPC 命令
@@ -222,10 +222,9 @@ release 下生效 —— 打 `cargo-env.bat build --release` 后就没了。
   配置字段、UI/日志文案均来自二进制证据，具体算法可能与原实现不同。
 - 原程序及相关素材的版权归 **HuyanBao Team** 所有。本仓库仅供学习与二次开发参考，
   **对外分发前请先确认授权**。
-- 仓库内含两份从原包提取的素材，仅供本地开发调试：
-  - `src-tauri/icons/icon.ico` ← 原 exe 的 `RT_GROUP_ICON` / `RT_ICON`
-  - `src/assets/logo.svg` ← 原包前端内嵌的 data-URL logo
-  正式产品请替换成自己的图标与品牌资源。
+- 仓库曾含两份从原包提取的素材，现已替换为紫色主题的自定义品牌资源：
+  - `src-tauri/icons/icon.ico` ← 自定义图标（原 exe `RT_GROUP_ICON`/`RT_ICON` 还原版备份为 `icon.original.ico`）
+  - `src/assets/logo.png` ← 标题栏/侧栏/关于页/favicon 的 UI 品牌图（与图标同图，256×256）；原包 data-URL 还原的 `logo.svg` 已移除
 - 默认构建是**离线**的（`state::ALLOW_HUYANBAO_NET = false`）：不拉宠物库、不检查更新、
   不上报、不注入 `tongji.js`。需要恢复原包联网行为时改这一个常量即可。
 

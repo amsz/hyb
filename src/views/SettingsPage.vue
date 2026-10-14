@@ -263,8 +263,8 @@ async function patch(p) {
 .hint{font-size:11px;color:var(--muted)}
 .row{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:12px}
 .row.between{justify-content:space-between}
-.key-btn{min-width:168px;padding:6px 10px;border:1px solid var(--border);border-radius:8px;background:var(--key-bg);color:var(--mint-700);cursor:pointer;font-size:12px}
-.key-btn.capturing{border-color:var(--mint-600);background:#26a69a1f}
+.key-btn{min-width:168px;padding:6px 10px;border:1px solid var(--border);border-radius:8px;background:var(--key-bg);color:var(--lav-700);cursor:pointer;font-size:12px}
+.key-btn.capturing{border-color:var(--lav-600);background:#7e57c21f}
 .key-cell{display:inline-flex;align-items:center;gap:6px}
 .clear-btn{width:24px;height:24px;padding:0;border:1px solid var(--border);border-radius:8px;background:var(--key-bg);color:var(--muted);cursor:pointer;font-size:13px;line-height:1}
 .clear-btn:disabled,.key-btn:disabled{opacity:.45;cursor:default}

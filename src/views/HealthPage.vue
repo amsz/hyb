@@ -310,23 +310,23 @@ const weekSkipped = computed(() => sum("restSkipped"));
 .page h2{margin:0 0 14px;font-size:18px}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .stat{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 12px}
-.value{font-size:18px;font-weight:700;color:var(--mint-700)}
+.value{font-size:18px;font-weight:700;color:var(--lav-700)}
 .label{margin-top:4px;font-size:12px;color:var(--muted)}
 .trend{margin-top:18px}
 .trend-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px}
 .section-title{font-size:15px;font-weight:700}
-.streak{font-size:12px;font-weight:700;color:var(--mint-700)}
+.streak{font-size:12px;font-weight:700;color:var(--lav-700)}
 .chart{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;padding:12px 10px 10px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
 .col{display:flex;flex-direction:column;align-items:center;gap:5px}
 .bar-slot{display:flex;align-items:flex-end;width:100%;height:78px}
-.bar{width:100%;border-radius:5px 5px 2px 2px;background:linear-gradient(180deg,var(--mint-500),var(--mint-700));opacity:.55;transition:height .24s ease}
+.bar{width:100%;border-radius:5px 5px 2px 2px;background:linear-gradient(180deg,var(--lav-500),var(--lav-700));opacity:.55;transition:height .24s ease}
 .bar.today{opacity:1}
-.rests{font-size:11px;font-weight:700;color:var(--mint-700);font-variant-numeric:tabular-nums}
+.rests{font-size:11px;font-weight:700;color:var(--lav-700);font-variant-numeric:tabular-nums}
 .rests.none{color:var(--muted);font-weight:400}
 .day-label{font-size:11px;color:var(--muted)}
-.day-label.today{color:var(--mint-700);font-weight:700}
+.day-label.today{color:var(--lav-700);font-weight:700}
 .summary{margin-top:10px;font-size:12px;color:var(--muted);line-height:1.6}
-.summary b{color:var(--mint-700);font-variant-numeric:tabular-nums}
+.summary b{color:var(--lav-700);font-variant-numeric:tabular-nums}
 .empty,.legend{font-size:11px;color:var(--muted);line-height:1.6}
 .empty{padding:16px 12px;border:1px dashed var(--border);border-radius:14px;text-align:center}
 .legend{margin-top:4px}

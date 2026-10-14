@@ -119,7 +119,7 @@ async function save() {
     <template v-if="draft.restPetEnabled">
       <div class="pet-grid">
         <div v-for="animal in store.animals" :key="animal.id" class="pet-card">
-          <div class="pet-thumb" :style="{ background: animal.bgColor || '#e6f7f2' }">
+          <div class="pet-thumb" :style="{ background: animal.bgColor || '#f2eefb' }">
             <img
               v-if="animal.assets?.thumbnail"
               :src="assetUrl(animal.assets.thumbnail)"
@@ -221,22 +221,22 @@ async function save() {
 .hint{margin:-4px 0 10px;font-size:11px;color:var(--muted)}
 .presence{display:grid;grid-template-columns:1fr;gap:8px}
 .presence-card{display:grid;grid-template-columns:72px 1fr;grid-template-rows:auto auto;column-gap:10px;padding:10px;border:1px solid var(--border);border-radius:14px;background:transparent;color:inherit;text-align:left;cursor:pointer}
-.presence-card.active{border-color:var(--mint-600);background:var(--key-bg)}
-.presence-preview{grid-row:1/span 2;position:relative;width:72px;height:52px;border-radius:10px;background:#eef7f6;overflow:hidden}
-.presence-screen{position:absolute;top:6px;right:8px;bottom:6px;left:8px;border-radius:4px;background:#d7ece9}
-.presence-pet{position:absolute;width:16px;height:16px;border-radius:999px;background:#26a69a}
-.presence-preview.peek .presence-screen{background:#9aaeab}
+.presence-card.active{border-color:var(--lav-600);background:var(--key-bg)}
+.presence-preview{grid-row:1/span 2;position:relative;width:72px;height:52px;border-radius:10px;background:#f5f2fc;overflow:hidden}
+.presence-screen{position:absolute;top:6px;right:8px;bottom:6px;left:8px;border-radius:4px;background:#ded8f0}
+.presence-pet{position:absolute;width:16px;height:16px;border-radius:999px;background:#7e57c2}
+.presence-preview.peek .presence-screen{background:#a49dbb}
 .presence-preview.peek .presence-pet{right:8px;bottom:8px}
-.presence-preview.accompany .presence-screen{background:#8aa8a4}
+.presence-preview.accompany .presence-screen{background:#948da6}
 .presence-preview.accompany .presence-pet{left:50%;top:50%;width:22px;height:22px;transform:translate(-50%,-50%)}
-.presence-preview.focus .presence-screen{background:#3d5552}
+.presence-preview.focus .presence-screen{background:#453e58}
 .presence-preview.focus .presence-pet{left:50%;top:52%;width:34px;height:34px;transform:translate(-50%,-50%)}
 .presence-name{font-size:13px;font-weight:700}
 .presence-desc{margin-top:2px;font-size:11px;color:var(--muted)}
 .switch-title{font-size:13px;font-weight:700}
 .row{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:12px}
 .row.between{justify-content:space-between}
-.preview{position:relative;width:min(640px,82vw);height:min(480px,70vh);display:grid;place-items:center;border-radius:20px;background:#05100feb;overflow:hidden}
+.preview{position:relative;width:min(640px,82vw);height:min(480px,70vh);display:grid;place-items:center;border-radius:20px;background:#0f0a1ceb;overflow:hidden}
 .preview video{width:100%;height:100%;object-fit:contain}
 .preview-close{position:absolute;top:12px;right:12px;width:30px;height:30px;border:0;border-radius:50%;color:#fff;background:#00000073;cursor:pointer}
 </style>

@@ -270,9 +270,9 @@ onBeforeUnmount(() => {
         <svg viewBox="0 0 48 48" aria-hidden="true">
           <defs>
             <linearGradient id="beanFill" x1="12" y1="6" x2="38" y2="42" gradientUnits="userSpaceOnUse">
-              <stop offset="0" stop-color="#E8FFF8" />
-              <stop offset="0.55" stop-color="#9EE6D8" />
-              <stop offset="1" stop-color="#5EC4B4" />
+              <stop offset="0" stop-color="#F6F1FF" />
+              <stop offset="0.55" stop-color="#CFC0F0" />
+              <stop offset="1" stop-color="#8E76CC" />
             </linearGradient>
           </defs>
           <ellipse cx="17" cy="18" rx="8.5" ry="7.5" fill="url(#beanFill)" />
@@ -299,8 +299,8 @@ onBeforeUnmount(() => {
 .pose-menu .bean-inner,.dragging .bean-inner{animation:none}
 svg{display:block;width:44px;height:44px;overflow:visible}
 .shine{fill:#ffffff6b}
-.eye{fill:#1d4f49;transition:transform .18s ease}
-.mouth{fill:none;stroke:#1d4f49;stroke-width:1.35;stroke-linecap:round;opacity:0}
+.eye{fill:#37285f;transition:transform .18s ease}
+.mouth{fill:none;stroke:#37285f;stroke-width:1.35;stroke-linecap:round;opacity:0}
 .stage:not(.on) .bean-inner{filter:drop-shadow(0 3px 6px rgba(0,90,82,.12)) grayscale(.35) brightness(1.05)}
 .pose-peek.right .bean{right:-12px}
 .pose-peek.left .bean{left:-12px}
@@ -311,15 +311,15 @@ svg{display:block;width:44px;height:44px;overflow:visible}
 .sleep .eye{transform:scaleY(.22);transform-box:fill-box;transform-origin:center}
 .look .eye,.spark .eye{transform:scaleY(1.12);transform-box:fill-box;transform-origin:center}
 .smile .mouth{opacity:1}
-.hi{position:absolute;top:6px;z-index:2;padding:3px 7px;border-radius:999px;background:#ffffffe6;color:#2b6b63;font-size:10px;line-height:1.2;box-shadow:0 4px 10px #005a521f;pointer-events:none;animation:pop-6f9b6efb 1.6s ease both}
+.hi{position:absolute;top:6px;z-index:2;padding:3px 7px;border-radius:999px;background:#ffffffe6;color:#4a3887;font-size:10px;line-height:1.2;box-shadow:0 4px 10px #3a1f7a1f;pointer-events:none;animation:pop-6f9b6efb 1.6s ease both}
 .right .hi{left:4px}
 .left .hi{right:4px}
 .fan{position:absolute;top:0;right:0;bottom:0;left:0;pointer-events:none}
-.dot{position:absolute;display:grid;place-items:center;width:28px;height:28px;border:0;border-radius:999px;color:#0f4d46;background:#ffffffe6;box-shadow:0 4px 10px #005a5224;font-size:15px;font-weight:700;line-height:1;pointer-events:auto;cursor:pointer}
-.dot.power{width:30px;height:30px;background:#26a69a}
+.dot{position:absolute;display:grid;place-items:center;width:28px;height:28px;border:0;border-radius:999px;color:#37285f;background:#ffffffe6;box-shadow:0 4px 10px #3a1f7a24;font-size:15px;font-weight:700;line-height:1;pointer-events:auto;cursor:pointer}
+.dot.power{width:30px;height:30px;background:#7e57c2}
 .dot.power.off{background:#ffffffdb}
 .spark{width:8px;height:8px;border-radius:999px;background:#fff8e7;box-shadow:0 0 8px #fff4d6e6}
-.dot.power.off .spark{background:#9bb8b3;box-shadow:none}
+.dot.power.off .spark{background:#a9a2bb;box-shadow:none}
 .right .minus{left:28px;top:86px}
 .right .plus{left:28px;top:18px}
 .right .power{left:10px;top:51px}

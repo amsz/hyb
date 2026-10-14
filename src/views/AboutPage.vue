@@ -1,7 +1,7 @@
 <script setup>
 import { onMounted, ref } from "vue";
 import { checkForUpdates, getAppVersion, openUrl } from "../lib/ipc";
-import logo from "../assets/logo.svg";
+import logo from "../assets/logo.png";
 
 const SHARE_URL = "https://huyanbao.cc";
 const FEEDBACK_URL = "https://tally.so/r/Y5ljDB"; // 原包 VZ 常量
@@ -100,13 +100,13 @@ async function checkUpdate() {
 <style scoped>
 /* 还原自 huyanbao.exe 内嵌 bundle 的 scoped 样式（原作用域 data-v-17b6c252） */
 .hero{display:grid;grid-template-columns:56px 1fr;gap:14px;align-items:center;margin-bottom:14px}
-.hero-logo{width:56px;height:56px;border-radius:18px;box-shadow:var(--shadow)}
+.hero-logo{width:56px;height:56px;border-radius:18px;box-shadow:var(--shadow);background:linear-gradient(135deg,#b39ddb,#7e57c2)}
 h2{margin:0;font-size:20px}
 p{margin:6px 0 0;color:var(--muted);font-size:12px;line-height:1.55}
 .block{margin-bottom:12px;padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--card)}
 .block.compact{display:flex;justify-content:space-between;align-items:center;gap:12px}
 .title{margin-bottom:8px;font-size:13px;font-weight:700}
-.feature{padding:7px 0;color:var(--ink);font-size:12px;border-top:1px solid rgba(38,166,154,.1)}
+.feature{padding:7px 0;color:var(--ink);font-size:12px;border-top:1px solid rgba(126,87,194,.1)}
 .feature:first-of-type{border-top:0}
 .muted{color:var(--muted);font-size:12px;word-break:break-all}
 .version{margin-top:16px;color:var(--muted);font-size:11px;text-align:center}

@@ -10,10 +10,20 @@ const theme = computed(() => (store.config?.uiDarkMode ? darkTheme : null));
 const isMac =
   navigator.userAgent.includes("Macintosh") || navigator.platform.toLowerCase().includes("mac");
 if (isMac) document.documentElement.classList.add("is-mac");
+
+/** 主题色：淡紫系（对应 app.css 的 --lav-*）——naive-ui 组件（按钮/开关/滑块）的主色 */
+const themeOverrides = {
+  common: {
+    primaryColor: "#7E57C2",
+    primaryColorHover: "#9575CD",
+    primaryColorPressed: "#5E35B1",
+    primaryColorSuppl: "#9575CD",
+  },
+};
 </script>
 
 <template>
-  <n-config-provider :theme="theme" class="app-root">
+  <n-config-provider :theme="theme" :theme-overrides="themeOverrides" class="app-root">
     <router-view />
   </n-config-provider>
 </template>

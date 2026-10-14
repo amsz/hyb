@@ -5,7 +5,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { hideMainToTray } from "../lib/ipc";
 import { useAppStore } from "../store/app";
 import AppIcon from "./AppIcon.vue";
-import logo from "../assets/logo.svg";
+import logo from "../assets/logo.png";
 
 const store = useAppStore();
 const router = useRouter();
@@ -115,25 +115,25 @@ function closeToTray() {
 <style scoped>
 /* 还原自 huyanbao.exe 内嵌 bundle 的 scoped 样式（原作用域 data-v-8620a25b） */
 .shell{display:grid;grid-template-columns:128px minmax(0,1fr);grid-template-rows:38px minmax(0,1fr);width:100%;height:100%;min-height:0;background:var(--shell-bg)}
-.titlebar{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;height:38px;padding-left:12px;background:var(--titlebar-bg);border-bottom:1px solid rgba(38,166,154,.12)}
+.titlebar{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;height:38px;padding-left:12px;background:var(--titlebar-bg);border-bottom:1px solid rgba(126,87,194,.12)}
 .shell.mac .titlebar{padding-left:84px}
 .window-title{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:var(--ink)}
-.window-mark{width:20px;height:20px;border-radius:7px}
+.window-mark{width:20px;height:20px;border-radius:7px;background:linear-gradient(135deg,#b39ddb,#7e57c2)}
 .window-actions{display:flex;height:100%}
 .window-btn{width:46px;height:100%;border:0;color:var(--muted);background:transparent;cursor:pointer;display:inline-flex;align-items:center;justify-content:center}
-.window-btn:hover{background:#26a69a1a}
+.window-btn:hover{background:#7e57c21a}
 .window-btn.close:hover{color:#fff;background:#e57373}
 .sidebar{display:flex;flex-direction:column;min-height:0;overflow:hidden;padding:14px 10px;border-right:1px solid var(--border);background:var(--sidebar-bg)}
 .brand{display:flex;gap:8px;align-items:center;margin-bottom:18px;padding:4px}
-.logo{width:34px;height:34px;border-radius:12px;box-shadow:var(--shadow)}
+.logo{width:34px;height:34px;border-radius:12px;box-shadow:var(--shadow);background:linear-gradient(135deg,#b39ddb,#7e57c2)}
 .name{font-size:13px;font-weight:700;letter-spacing:.02em}
 .sub{font-size:10px;color:var(--muted);margin-top:2px}
 nav{display:flex;flex-direction:column;gap:6px;flex:1}
 .nav-item{display:flex;align-items:center;gap:8px;padding:10px;border-radius:12px;color:var(--muted);text-decoration:none;transition:.2s ease}
-.nav-item:hover{background:#4db6ac1f;color:var(--mint-700)}
-.nav-item.active{background:linear-gradient(135deg,#4db6ac3d,#26a69a2e);color:var(--mint-700);font-weight:600}
+.nav-item:hover{background:#b39ddb1f;color:var(--lav-700)}
+.nav-item.active{background:linear-gradient(135deg,#b39ddb3d,#7e57c22e);color:var(--lav-700);font-weight:600}
 .sidebar-foot{margin-top:auto}
-.timer-chip{font-size:11px;padding:8px;border-radius:10px;background:var(--card);border:1px solid var(--border);color:var(--mint-700);text-align:center;cursor:pointer}
+.timer-chip{font-size:11px;padding:8px;border-radius:10px;background:var(--card);border:1px solid var(--border);color:var(--lav-700);text-align:center;cursor:pointer}
 .content{min-width:0;min-height:0;overflow:auto;padding:16px 16px 18px}
-.boot{height:100%;display:grid;place-items:center;color:var(--mint-700);background:var(--mint-50)}
+.boot{height:100%;display:grid;place-items:center;color:var(--lav-700);background:var(--lav-50)}
 </style>

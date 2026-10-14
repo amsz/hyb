@@ -284,9 +284,9 @@ onUnmounted(() => {
 /* 还原自 huyanbao.exe 内嵌 bundle 的 scoped 样式（原作用域 data-v-38071425） */
 .stage{position:fixed;top:0;right:0;bottom:0;left:0;overflow:hidden;background:transparent;cursor:default}
 .stage.peek{overflow:visible}
-.backdrop{position:absolute;top:0;right:0;bottom:0;left:0;background:#05100f;opacity:0;animation:fade-in-38071425 .9s ease forwards}
+.backdrop{position:absolute;top:0;right:0;bottom:0;left:0;background:#0f0a1c;opacity:0;animation:fade-in-38071425 .9s ease forwards}
 .stage.peek .backdrop{opacity:1;animation:none;background:radial-gradient(ellipse 58% 62% at 50% 55%,rgba(5,16,15,.32) 0%,rgba(5,16,15,.12) 42%,transparent 72%)}
-.stage.focus .backdrop{background:#020908}
+.stage.focus .backdrop{background:#080411}
 .stage.leaving .backdrop{animation:fade-out-38071425 .8s ease forwards}
 .stage.leaving.peek .backdrop{animation:none;opacity:0;transition:opacity .8s ease}
 .card{position:absolute;top:0;right:0;bottom:0;left:0}
@@ -296,5 +296,5 @@ onUnmounted(() => {
 .stage.leaving .pet{transition:opacity .8s ease}
 .stage.peek .pet{width:100%;height:100%;top:0;left:0;transform:none}
 .stage.leaving .pet,.stage.leaving .ok{opacity:0}
-.ok{position:relative;z-index:2;margin-bottom:12px;padding:5px 12px;border:0;border-radius:999px;color:#ffffffe0;background:#05100f59;font-size:12px;cursor:pointer}
+.ok{position:relative;z-index:2;margin-bottom:12px;padding:5px 12px;border:0;border-radius:999px;color:#ffffffe0;background:#0f0a1c59;font-size:12px;cursor:pointer}
 </style>
