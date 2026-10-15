@@ -67,7 +67,10 @@ fn overlay_window(
         .focused(false)
         .always_on_top(true)
         .skip_taskbar(true)
-        .visible(true)
+        // ⚠ 必须先隐藏创建：如果 visible(true)，窗口会先出现在 Windows 默认级联位置
+        //   （屏幕左上区域），调用方 set_position 后才挪走 → 用户看到“左上角闪一个小窗”。
+        //   统一改为：隐藏创建 → 调用方定好位 → 再 show()。
+        .visible(false)
         .build()?;
     if transparent {
         // 关键：窗口层与 webview 层都得透明，否则会出现“透明矩形框”
@@ -161,6 +164,10 @@ pub fn replace_filter_overlay(app: &tauri::AppHandle) {
         let _ = win.close();
     }
     let _ = ensure_filter_overlay(app);
+    // 窗口现在是隐藏重建的；按当前 alpha 恢复显隐（不重跑 gamma，只管窗口）
+    let state = app.state::<Shared>();
+    let alpha = lock(&state).eye.alpha;
+    set_filter_overlay_visible(app, alpha > 0.0);
 }
 
 /// 休息宠物窗口：peek=右下角 640x400，其余=铺满屏幕
@@ -383,6 +390,7 @@ pub fn ensure_desktop_ear(app: &tauri::AppHandle, shared: &Shared) -> tauri::Res
                 log::info!("[windows] desktop ear restored at {px},{py} (dragged position)");
                 let _ = win.set_position(tauri::PhysicalPosition::new(px, py));
                 let _ = win.set_ignore_cursor_events(false);
+                let _ = win.show();
                 return Ok(());
             }
             log::warn!(
@@ -392,6 +400,7 @@ pub fn ensure_desktop_ear(app: &tauri::AppHandle, shared: &Shared) -> tauri::Res
     }
     place_ear_at_edge(app, &win, &side, y_percent);
     let _ = win.set_ignore_cursor_events(false);
+    let _ = win.show();
     Ok(())
 }
 
