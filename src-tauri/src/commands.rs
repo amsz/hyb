@@ -17,12 +17,19 @@ pub fn get_config(shared: tauri::State<'_, Shared>) -> AppConfig {
 }
 
 /// 保存配置：落盘 + 广播 + 应用副作用（自启/热键/小云豆/色温）
+///
+/// ⚠ 必须 async：副作用里 "ear" 会 `ensure_desktop_ear` → `WebviewWindowBuilder::build()`
+///   创建 WebView2。同步 command 跑在主线程上，主线程在事件循环泵消息时创建
+///   WebView2 会在初始化中途死锁：窗口壳建出来（白底、停在系统默认级联位置）
+///   但页面永远停在 about:blank，主线程卡死后所有 IPC 超时、托盘退出也无法执行。
+///   async command 跑在 async runtime 线程池上，窗口创建走 run_on_main_thread
+///   往返，主循环空闲 → 正常（与 `ensure_filter_overlay`/`preview_rest_presence` 同理）。
 #[tauri::command]
-pub fn save_config(
+pub async fn save_config(
     app: tauri::AppHandle,
     shared: tauri::State<'_, Shared>,
     config: AppConfig,
-) -> AppConfig {
+) -> AppResult<AppConfig> {
     let changed_keys = {
         let mut guard = lock(&shared);
         let old = guard.config.clone();
@@ -67,7 +74,7 @@ pub fn save_config(
 
     apply_side_effects(&app, &shared, &changed_keys);
     let _ = app.emit("config:changed", lock(&shared).config.clone());
-    lock(&shared).config.clone()
+    Ok(lock(&shared).config.clone())
 }
 
 fn apply_side_effects(app: &tauri::AppHandle, shared: &Shared, changed: &[&str]) {
@@ -231,9 +238,12 @@ pub fn toggle_timer_pause(
     lock(&shared).timer.clone()
 }
 
+/// ⚠ 必须 async：`start_rest` → `show_animal_overlay` → `WebviewWindowBuilder::build()`，
+///   同步 command（主线程）里创建 WebView2 会死锁（同 save_config 注释）。
 #[tauri::command]
-pub fn start_rest_now(app: tauri::AppHandle, shared: tauri::State<'_, Shared>) {
+pub async fn start_rest_now(app: tauri::AppHandle, shared: tauri::State<'_, Shared>) -> AppResult<()> {
     timer::start_now(&app, &shared);
+    Ok(())
 }
 
 #[tauri::command]
@@ -434,14 +444,18 @@ pub fn set_desktop_ear_pose(pose: String) {
     log::debug!("[windows] desktop ear pose -> {pose}");
 }
 
+/// 开始拖拽（前端超过阈值时调一次）。async：内部 outer_position 要等主循环回话。
 #[tauri::command]
-pub fn begin_desktop_ear_drag() {
-    log::debug!("[windows] desktop ear drag begin");
+pub async fn begin_desktop_ear_drag(app: tauri::AppHandle) -> AppResult<()> {
+    windows::begin_ear_drag(&app);
+    Ok(())
 }
 
+/// 结束拖拽：停拖拽线程 + 夹紧可见 + 把位置写进 config 持久化。
 #[tauri::command]
-pub fn end_desktop_ear_drag() {
-    log::debug!("[windows] desktop ear drag end");
+pub async fn end_desktop_ear_drag(app: tauri::AppHandle, shared: tauri::State<'_, Shared>) -> AppResult<()> {
+    windows::end_ear_drag(&app, &shared);
+    Ok(())
 }
 
 // ---------------------------------------------------------------- 快捷键

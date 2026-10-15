@@ -189,6 +189,12 @@ pub struct AppConfig {
     pub show_desktop_ear: bool,
     pub desktop_ear_side: String, // left | right
     pub desktop_ear_y: u32,
+    /// 拖拽后记住的绝对位置：虚拟屏**物理**像素、窗口外框左上角。
+    /// None = 未拖过，按 side/y 百分比在主屏边缘默认摆位。
+    #[serde(default)]
+    pub desktop_ear_px: Option<i32>,
+    #[serde(default)]
+    pub desktop_ear_py: Option<i32>,
 
     // ---- 常规 / 隐私 ----
     pub autostart: bool,
@@ -240,6 +246,8 @@ impl Default for AppConfig {
             show_desktop_ear: false,
             desktop_ear_side: "right".into(),
             desktop_ear_y: 38,
+            desktop_ear_px: None,
+            desktop_ear_py: None,
             autostart: true,
             allow_upload_stats: true,
             allow_auto_update: true,

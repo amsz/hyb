@@ -17,13 +17,17 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::TrayIconBuilder,
-    Manager, WebviewUrl, WebviewWindowBuilder,
+    Emitter, Manager, WebviewUrl, WebviewWindowBuilder,
 };
 
 const FILTER_W: f64 = 640.0;
 const FILTER_H: f64 = 400.0;
 const EAR_W: f64 = 150.0;
 const EAR_H: f64 = 170.0;
+/// 豆脸在 peek 姿势下伸出窗口边缘的 CSS 像素（前端 CSS `right/left:-12px`）。
+/// 单屏时这部分被屏幕边缘裁掉是设计（“只探出一点小脸”）；但双屏相邻时会画到副屏上，
+/// 所以定位时要把窗口往屏内收这么多，保证豆脸完整落在目标屏内。
+const EAR_PEEK_OVERHANG_CSS: f64 = 12.0;
 
 /// peek 小窗距主屏右/下边缘的距离。
 /// 由原包日志反推（两组独立数据，扣除 DWM 不可见边框 8px 后均为 右10 / 下56）：
@@ -258,14 +262,98 @@ pub fn close_animal_overlay(app: &tauri::AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
-/// 桌面小云豆：贴左/右边缘，垂直位置 desktopEarY%
+/// 主显示器的**物理**矩形 `(x, y, w, h)` + scale factor；拿不到时 None。
+/// 定位小云豆必须用物理坐标：`set_position(LogicalPosition)` 会按窗口当前所在屏的
+/// scale 换算，双屏不同 DPI 时会摆错位置（实测主屏 1.25）。
+fn primary_monitor_physical(app: &tauri::AppHandle) -> Option<(i32, i32, i32, i32, f64)> {
+    let mon = app
+        .primary_monitor()
+        .ok()
+        .flatten()
+        .or_else(|| app.available_monitors().ok().and_then(|ms| ms.into_iter().next()))?;
+    let p = mon.position();
+    let s = mon.size();
+    let scale = if mon.scale_factor() > 0.0 { mon.scale_factor() } else { 1.0 };
+    Some((p.x, p.y, s.width as i32, s.height as i32, scale))
+}
+
+/// (x, y, w, h) 是否至少有 (40, 40) 落在任意一个显示器内（物理坐标）
+fn window_visible_enough(app: &tauri::AppHandle, x: i32, y: i32, w: i32, h: i32) -> bool {
+    let Ok(mons) = app.available_monitors() else { return false };
+    mons.iter().any(|m| {
+        let p = m.position();
+        let s = m.size();
+        let (mx, my, mw, mh) = (p.x, p.y, s.width as i32, s.height as i32);
+        ((x + w).min(mx + mw) - x.max(mx) > 40) && ((y + h).min(my + mh) - y.max(my) > 40)
+    })
+}
+
+/// 把 (x,y) 夹紧到与它重叠最多的那个显示器内（物理坐标，按窗口尺寸）
+fn clamp_to_visible_monitor(
+    app: &tauri::AppHandle,
+    x: i32,
+    y: i32,
+    size: tauri::PhysicalSize<u32>,
+) -> (i32, i32) {
+    let (w, h) = (size.width as i32, size.height as i32);
+    let Ok(mons) = app.available_monitors() else { return (x, y) };
+    let mut best: Option<(i32, i32, i32, i32)> = None;
+    let mut best_ov = i32::MIN;
+    for m in &mons {
+        let p = m.position();
+        let s = m.size();
+        let (mx, my, mw, mh) = (p.x, p.y, s.width as i32, s.height as i32);
+        let ox = ((x + w).min(mx + mw) - x.max(mx)).max(0);
+        let oy = ((y + h).min(my + mh) - y.max(my)).max(0);
+        if ox * oy > best_ov {
+            best_ov = ox * oy;
+            best = Some((mx, my, mw, mh));
+        }
+    }
+    match best {
+        Some((mx, my, mw, mh)) => (
+            x.clamp(mx, (mx + mw - w).max(mx)),
+            y.clamp(my, (my + mh - h).max(my)),
+        ),
+        None => (x, y),
+    }
+}
+
+/// 默认摆位：窗口外框贴主屏边缘，并为豆脸的 peek 伸出留出余量，
+/// 保证窗口和豆脸都完整落在目标屏内（双屏相邻也不越界）。
+fn place_ear_at_edge(
+    app: &tauri::AppHandle,
+    win: &tauri::WebviewWindow,
+    side: &str,
+    y_percent: u32,
+) {
+    let Some((mx, my, mw, mh, scale)) = primary_monitor_physical(app) else {
+        log::warn!("[windows] no monitor for desktop ear placement");
+        return;
+    };
+    let overhang = (EAR_PEEK_OVERHANG_CSS * scale).round() as i32;
+    let Ok(size) = win.outer_size() else { return };
+    let (w, h) = (size.width as i32, size.height as i32);
+    let x = if side == "left" {
+        mx + overhang
+    } else {
+        (mx + mw - overhang - w).max(mx)
+    };
+    let y = (my + (mh as f64 * y_percent.min(100) as f64 / 100.0) as i32).min(my + mh - h);
+    log::info!("[windows] desktop ear placed at {x},{y} ({side}, y={y_percent}% of {mw}x{mh}@{scale})");
+    let _ = win.set_position(tauri::PhysicalPosition::new(x, y));
+}
+
+/// 桌面小云豆：优先用上次拖拽记住的位置，否则贴主屏边缘。
+/// 坐标全部用**物理**像素：LogicalPosition 按窗口当前所在屏的 scale 换算，双屏异 DPI 会摆错。
 pub fn ensure_desktop_ear(app: &tauri::AppHandle, shared: &Shared) -> tauri::Result<()> {
-    let (show, side, y_percent) = {
+    let (show, side, y_percent, saved) = {
         let guard = lock(shared);
         (
             guard.config.show_desktop_ear,
             guard.config.desktop_ear_side.clone(),
             guard.config.desktop_ear_y,
+            (guard.config.desktop_ear_px, guard.config.desktop_ear_py),
         )
     };
     if let Some(win) = app.get_webview_window("desktop-ear") {
@@ -288,13 +376,99 @@ pub fn ensure_desktop_ear(app: &tauri::AppHandle, shared: &Shared) -> tauri::Res
         }
     };
 
-    let (mx, my, sw, sh) = primary_monitor_logical(app);
-    let x = mx + if side == "left" { 0.0 } else { (sw - EAR_W).max(0.0) };
-    let y = my + sh * (y_percent.min(100) as f64) / 100.0;
-    let _ = win.set_position(tauri::LogicalPosition::new(x, y));
-    compensate_invisible_frame(&win);
+    // 记住的位置：只要还有足够的部分在某个屏幕内就用它（换屏/改分辨率后自动回退默认摆位）
+    if let (Some(px), Some(py)) = saved {
+        if let Ok(size) = win.outer_size() {
+            if window_visible_enough(app, px, py, size.width as i32, size.height as i32) {
+                log::info!("[windows] desktop ear restored at {px},{py} (dragged position)");
+                let _ = win.set_position(tauri::PhysicalPosition::new(px, py));
+                let _ = win.set_ignore_cursor_events(false);
+                return Ok(());
+            }
+            log::warn!(
+                "[windows] saved desktop ear position {px},{py} is off-screen; using edge placement"
+            );
+        }
+    }
+    place_ear_at_edge(app, &win, &side, y_percent);
     let _ = win.set_ignore_cursor_events(false);
     Ok(())
+}
+
+// ---------------------------------------------------------------- 小云豆拖拽
+//
+// 后端用一个后台线程轮询光标位置来拖动窗口：
+// 前端只负责在超过阈值时调 begin、松手时调 end（pointer capture 保证窗移出后仍能收到 pointerup），
+// 不逐帧发 IPC。end 时把最终外框位置（物理坐标）写进 config 持久化。
+
+static EAR_DRAG_STOP: AtomicBool = AtomicBool::new(false);
+static EAR_DRAG_RUNNING: AtomicBool = AtomicBool::new(false);
+/// 当前抓取偏移（光标 - 窗口外框），线程每帧读取；begin 时重算，
+/// 这样即使上一次拖拽线程因异常未退干净，重新 begin 也能拿到正确的偏移。
+static EAR_DRAG_OFFSET: std::sync::Mutex<(i32, i32)> = std::sync::Mutex::new((0, 0));
+
+fn cursor_pos_physical() -> Option<(i32, i32)> {
+    use windows::Win32::Foundation::POINT;
+    use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
+    let mut p = POINT::default();
+    unsafe { GetCursorPos(&mut p).ok()?; }
+    Some((p.x, p.y))
+}
+
+/// 开始拖拽：记录抓取偏移，后台线程每 ~8ms 把窗口外框贴到光标上。
+pub fn begin_ear_drag(app: &tauri::AppHandle) {
+    let Some(win) = app.get_webview_window("desktop-ear") else { return };
+    let Some((cx, cy)) = cursor_pos_physical() else { return };
+    let Ok(origin) = win.outer_position() else { return };
+    let (dx, dy) = (cx - origin.x, cy - origin.y);
+    if let Ok(mut off) = EAR_DRAG_OFFSET.lock() {
+        *off = (dx, dy);
+    }
+    log::debug!("[windows] desktop ear drag begin at {cx},{cy} grab-offset {dx},{dy}");
+    if EAR_DRAG_RUNNING.swap(true, Ordering::SeqCst) {
+        return; // 线程已在跑，只需更新偏移
+    }
+    EAR_DRAG_STOP.store(false, Ordering::SeqCst);
+    let app_handle = app.clone();
+    std::thread::spawn(move || {
+        while !EAR_DRAG_STOP.load(Ordering::SeqCst) {
+            if app_handle.get_webview_window("desktop-ear").is_none() {
+                break; // 窗口在拖拽中被销毁（如关掉小云豆）→ 线程自退
+            }
+            if let (Some((cx, cy)), Ok(off)) = (cursor_pos_physical(), EAR_DRAG_OFFSET.lock()) {
+                let _ = win.set_position(tauri::PhysicalPosition::new(cx - off.0, cy - off.1));
+            }
+            std::thread::sleep(std::time::Duration::from_millis(8));
+        }
+        EAR_DRAG_RUNNING.store(false, Ordering::SeqCst);
+    });
+}
+
+/// 结束拖拽：停线程 → 夹紧到可见屏 → 写进 config 持久化。
+pub fn end_ear_drag(app: &tauri::AppHandle, shared: &Shared) {
+    EAR_DRAG_STOP.store(true, Ordering::SeqCst);
+    // 等拖拽线程退出（每 8ms 检查一次，最多 ~100ms）
+    for _ in 0..20 {
+        if !EAR_DRAG_RUNNING.load(Ordering::SeqCst) {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    let Some(win) = app.get_webview_window("desktop-ear") else { return };
+    let Ok(pos) = win.outer_position() else { return };
+    let (x, y) = match win.outer_size() {
+        Ok(size) => clamp_to_visible_monitor(app, pos.x, pos.y, size),
+        Err(_) => (pos.x, pos.y),
+    };
+    let _ = win.set_position(tauri::PhysicalPosition::new(x, y));
+    {
+        let mut guard = lock(shared);
+        guard.config.desktop_ear_px = Some(x);
+        guard.config.desktop_ear_py = Some(y);
+        let _ = crate::state::save_config(&guard.config);
+    }
+    let _ = app.emit("config:changed", lock(shared).config.clone());
+    log::info!("[windows] desktop ear dragged to {x},{y}, position saved");
 }
 
 // ---------------------------------------------------------------- 主窗口
@@ -380,7 +554,7 @@ pub fn build_tray(app: &tauri::AppHandle, shared: &Shared) -> tauri::Result<()> 
         &[&show, &rest, &sep, &quit],
     )?;
 
-    let shared_for_tray = shared.clone();
+    let shared_for_rest = shared.clone();
     let mut builder = TrayIconBuilder::with_id("main-tray")
         .tooltip("护眼宝")
         .menu(&menu)
@@ -388,7 +562,15 @@ pub fn build_tray(app: &tauri::AppHandle, shared: &Shared) -> tauri::Result<()> 
         .on_menu_event(move |app, event| {
             let id = event.id().as_ref();
             match id {
-                "rest" => timer::start_now(app, &shared_for_tray),
+                // ⚠ 托盘菜单事件在主线程回调；start_now → show_animal_overlay →
+                //   WebviewWindowBuilder::build() 在主线程创建 WebView2 会死锁
+                //   （窗口壳变白底、页面 about:blank、主线程卡死、退出也失效）。
+                //   丢到后台线程里跑，窗口创建会正常往返主循环。
+                "rest" => {
+                    let app = app.clone();
+                    let shared = shared_for_rest.clone();
+                    std::thread::spawn(move || timer::start_now(&app, &shared));
+                }
                 "show" => {
                     let _ = show_main(app);
                 }
