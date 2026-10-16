@@ -109,6 +109,23 @@ pub fn run() {
             let _ = windows::ensure_filter_overlay(&handle);
             bluelight::refresh(&handle, &shared);
 
+            // 主窗口隐藏启动（消灭启动白屏），前端首帧渲染完后会调 show_main_window。
+            // 兑底：若前端挂了（JS 报错/加载失败），3s 后强制显示，避免"点了图标没反应"。
+            {
+                let handle = handle.clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_secs(3));
+                    if let Some(win) = handle.get_webview_window("main") {
+                        if !win.is_visible().unwrap_or(false) {
+                            log::warn!(
+                                "[windows] main window still hidden after 3s (frontend may have failed), forcing show"
+                            );
+                            let _ = windows::show_main(&handle);
+                        }
+                    }
+                });
+            }
+
             // 托盘
             if let Err(e) = windows::build_tray(&handle, &shared) {
                 log::warn!("[windows] tray build failed: {e}");
