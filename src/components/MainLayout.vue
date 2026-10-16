@@ -55,10 +55,6 @@ function closeToTray() {
 <template>
   <div v-if="store.ready" class="shell" :class="{ mac: isMac }">
     <header class="titlebar" data-tauri-drag-region>
-      <div v-if="!isMac" class="window-title" data-tauri-drag-region>
-        <img class="window-mark" :src="logo" alt="" />
-        <span data-tauri-drag-region>护眼宝</span>
-      </div>
       <div v-if="!isMac" class="window-actions">
         <button class="window-btn" type="button" title="最小化" @click="minimize">
           <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
@@ -84,7 +80,7 @@ function closeToTray() {
         <img class="logo" :src="logo" alt="护眼宝" />
         <div>
           <div class="name">护眼宝</div>
-          <div class="sub">护眼 · 休息 · 陪伴</div>
+          <div class="sub">休息 · 陪伴</div>
         </div>
       </div>
 
@@ -115,10 +111,8 @@ function closeToTray() {
 <style scoped>
 /* 还原自 huyanbao.exe 内嵌 bundle 的 scoped 样式（原作用域 data-v-8620a25b） */
 .shell{display:grid;grid-template-columns:128px minmax(0,1fr);grid-template-rows:38px minmax(0,1fr);width:100%;height:100%;min-height:0;background:var(--shell-bg)}
-.titlebar{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;height:38px;padding-left:12px;background:var(--titlebar-bg);border-bottom:1px solid rgba(126,87,194,.12)}
+.titlebar{grid-column:1/-1;display:flex;align-items:center;justify-content:flex-end;height:38px;padding-left:12px;background:var(--titlebar-bg);border-bottom:1px solid rgba(126,87,194,.12)}
 .shell.mac .titlebar{padding-left:84px}
-.window-title{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:var(--ink)}
-.window-mark{width:20px;height:20px;border-radius:7px;background:linear-gradient(135deg,#b39ddb,#7e57c2)}
 .window-actions{display:flex;height:100%}
 .window-btn{width:46px;height:100%;border:0;color:var(--muted);background:transparent;cursor:pointer;display:inline-flex;align-items:center;justify-content:center}
 .window-btn:hover{background:#7e57c21a}
