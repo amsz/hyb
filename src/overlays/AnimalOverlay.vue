@@ -71,11 +71,21 @@ const isMac =
 const isWindows =
   navigator.userAgent.includes("Windows") || navigator.platform.toLowerCase().startsWith("win");
 
-/** 背景压暗 */
+/**
+ * 背景压暗。
+ *
+ * 原包 bundle 里这一行是 `presence==="focus" ? "0.90" : ((timer.dimOpacity ?? 90) / 100)`——
+ * 读的是 **timer** 上的 dimOpacity，而 `TimerState` 根本没有这个字段（原包 TimerState 的
+ * 序列化字段只有 state/workElapsedSecs/…/animalId/presence，见 exe .rdata 字面量），
+ * 所以 accompany 永远走 `?? 90` → **0.900**。
+ *
+ * 我们曾经写成 `animal.dimOpacity ?? config.dimOpacity ?? 90`，而 config.dimOpacity 默认是
+ * 28 → accompany 的压暗只有 0.28，桌面几乎没被盖住，看起来就像“没有全屏”。
+ */
 const dim = computed(() => {
   if (presence.value === "peek") return "0.28";
   if (presence.value === "focus") return "0.90";
-  return ((animal.value?.dimOpacity ?? config.value?.dimOpacity ?? 90) / 100).toFixed(3);
+  return ((timer.value?.dimOpacity ?? 90) / 100).toFixed(3);
 });
 
 /** 只有 enter / idle 相同（或 loopEnter）才循环 */
@@ -227,8 +237,11 @@ onMounted(async () => {
   const [t, c] = await Promise.all([getTimer(), getConfig()]);
   timer.value = t;
   config.value = c;
-  // 预览：真休息的 presence/animalId 都是空的，改用 query，其次配置值
-  presence.value = t.presence || previewPresence || c.restPresence || "accompany";
+  // 预览：URL query 里的 presence 必须优先。
+  // 曾经写成 `t.presence || previewPresence`，而没有真休息在跑时 timer.presence 是
+  // TimerState 的默认值 "peek"（恒非空）→ 试看 accompany/focus 时窗口虽然已铺满主屏，
+  // 页面却按 peek 渲染：不压暗、宠物 object-fit:contain 居中 → 看起来“没有全屏”。
+  presence.value = (isPreview && previewPresence) || t.presence || c.restPresence || "accompany";
   const wanted = (isPreview && previewAnimalId) || t.animalId || c.selectedAnimalId || "";
   animal.value = wanted ? await getAnimal(wanted) : null;
   const assets = animal.value?.assets;

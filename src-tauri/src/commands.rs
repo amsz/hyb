@@ -343,12 +343,19 @@ pub async fn preview_rest_presence(
     let seq = PREVIEW_SEQ.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
     std::thread::spawn(move || {
         std::thread::sleep(std::time::Duration::from_secs(PREVIEW_SECONDS));
-        if PREVIEW_SEQ.load(std::sync::atomic::Ordering::SeqCst) == seq {
-            log::info!("[windows] preview timeout, closing overlay");
-            windows::close_overlay_quietly(&app, "animal-overlay");
-        } else {
+        if PREVIEW_SEQ.load(std::sync::atomic::Ordering::SeqCst) != seq {
             log::info!("[windows] preview superseded by a newer one, skip closing");
+            return;
         }
+        // 预览的 10s 定时器不能关掉真休息的窗口：用户可能在这 10s 内点了“立即休息”，
+        // 此时 label=animal-overlay 已被真休息重建；误关会让休息全程看不到宠物
+        // （而且 Destroyed 被 SUPPRESS 抑制，休息不会结束 → 卡在 2 分钟倒计时）。
+        if lock(&app.state::<Shared>()).rest_running {
+            log::info!("[windows] preview timeout skipped: a real rest took over the overlay");
+            return;
+        }
+        log::info!("[windows] preview timeout, closing overlay");
+        windows::close_overlay_quietly(&app, "animal-overlay");
     });
     Ok(())
 }
