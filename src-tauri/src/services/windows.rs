@@ -51,16 +51,20 @@ fn overlay_window(
     app: &tauri::AppHandle,
     label: &str,
     url: &str,
-    w: f64,
-    h: f64,
+    size: tauri::PhysicalSize<u32>,
+    scale: f64,
     transparent: bool,
 ) -> tauri::Result<tauri::WebviewWindow> {
     if let Some(win) = app.get_webview_window(label) {
         return Ok(win);
     }
+    let scale = if scale > 0.0 { scale } else { 1.0 };
     let win = WebviewWindowBuilder::new(app, label, WebviewUrl::App(url.into()))
         .title(label)
-        .inner_size(w, h)
+        // ⚠ `inner_size` 只能传逻辑值（tao 内部会再乘一次主屏 scale 还原成物理值）。
+        //   这里按同一个 scale 反算，保证建窗那一帧就是目标物理尺寸；
+        //   真正的最终尺寸/位置由调用方的 `place_overlay_physical` 用物理像素钉死。
+        .inner_size(size.width as f64 / scale, size.height as f64 / scale)
         .transparent(transparent)
         .decorations(false)
         .resizable(false)
@@ -98,38 +102,38 @@ fn compensate_invisible_frame(win: &tauri::WebviewWindow) {
     let _ = win.set_position(tauri::PhysicalPosition::new(outer.x - dx, outer.y - dy));
 }
 
-/// 当前主显示器尺寸（逻辑坐标），拿不到时回落 1920x1080
-/// 主显示器的逻辑区域 `(x, y, w, h)`。
-/// ⚠ 两个坑：
-///   1. `monitor.size()` 是**物理**像素，`inner_size()`/`LogicalPosition` 要**逻辑**像素 → 需除以 scale；
-///   2. 主屏不一定在 (0,0)（本机就是向右偏移），overlay 必须摆到 `monitor.position()`，不能写死 0,0。
-fn primary_monitor_logical(app: &tauri::AppHandle) -> (f64, f64, f64, f64) {
-    let mon = app
-        .primary_monitor()
-        .ok()
-        .flatten()
-        .or_else(|| app.available_monitors().ok().and_then(|ms| ms.into_iter().next()));
-    match mon {
-        Some(m) => {
-            let s = m.size();
-            let p = m.position();
-            let scale = if m.scale_factor() > 0.0 { m.scale_factor() } else { 1.0 };
-            (
-                p.x as f64 / scale,
-                p.y as f64 / scale,
-                s.width as f64 / scale,
-                s.height as f64 / scale,
-            )
-        }
-        None => (0.0, 0.0, 1920.0, 1080.0),
-    }
+/// 把 overlay 窗口钉到「主屏物理矩形」——全程物理像素，不做任何逻辑↔物理换算。
+///
+/// ⚠ 为什么不能用 `set_size(LogicalSize)`：
+///   `LogicalSize → 物理` 用的是 **窗口创建瞬间**缓存下来的 scale factor
+///   （tao 的 `WindowState.scale_factor`，来自那一刻的 `GetDpiForWindow(hwnd)`）。
+///   窗口是 `.visible(false)` 先建、`set_position` 后移的，125% 缩放下这个缓存偶尔取到
+///   1.0，于是主屏逻辑尺寸 2048x1152 被当成**物理像素**写死；之后窗口落到主屏、DPI 变
+///   120，但它一开始就在主屏上，不会触发 `WM_DPICHANGED`，尺寸就永久停在 80%。
+///   实测现象：`GetWindowRect = 0,0 2048x1152` 而 `GetDpiForWindow = 120`，
+///   压暗层只盖住左上角，右侧 512px / 底部 288px 露出桌面。
+fn place_overlay_physical(
+    win: &tauri::WebviewWindow,
+    x: i32,
+    y: i32,
+    size: tauri::PhysicalSize<u32>,
+) {
+    let _ = win.set_size(size);
+    let _ = win.set_position(tauri::PhysicalPosition::new(x, y));
 }
 
 /// 滤镜蒙层：铺满主显示器，点击穿透；alpha=0 时应当隐藏而不是常驻
 pub fn ensure_filter_overlay(app: &tauri::AppHandle) -> tauri::Result<()> {
-    let (mx, my, w, h) = primary_monitor_logical(app);
-    let win = match overlay_window(app, "filter-overlay", "index.html#/overlay/filter", w, h, true)
-    {
+    let (px, py, pw, ph, scale) = primary_monitor_physical(app).unwrap_or((0, 0, 1920, 1080, 1.0));
+    let size = tauri::PhysicalSize::new(pw as u32, ph as u32);
+    let win = match overlay_window(
+        app,
+        "filter-overlay",
+        "index.html#/overlay/filter",
+        size,
+        scale,
+        true,
+    ) {
         Ok(w) => w,
         Err(e) => {
             log::warn!("[windows] filter overlay failed: {e}");
@@ -138,8 +142,8 @@ pub fn ensure_filter_overlay(app: &tauri::AppHandle) -> tauri::Result<()> {
     };
     let _ = win.set_ignore_cursor_events(true);
     let _ = win.set_always_on_top(true);
-    // 摆到主屏原点（主屏可能不在 0,0）
-    let _ = win.set_position(tauri::LogicalPosition::new(mx, my));
+    // 摆到主屏原点（主屏可能不在 0,0）；物理像素，避开 125% 缩放的换算坑
+    place_overlay_physical(&win, px, py, size);
     compensate_invisible_frame(&win);
     // 关键：让窗口/webview 层都透明，否则会出现“遮罩常驻 + 拖动残影”
     let _ = win.set_background_color(Some(tauri::window::Color(0, 0, 0, 0)));
@@ -196,9 +200,18 @@ pub fn show_animal_overlay(
 
     let peek = presence == "peek";
     // accompany / focus：铺满主屏（否则压暗层盖不住全屏，会露出窗口矩形边）
-    // 原包日志写死 `1920x1080`，在 >1080p 的屏幕上就是这个缺陷的来源
-    let (mx, my, sw, sh) = primary_monitor_logical(app);
-    let (w, h) = if peek { (FILTER_W, FILTER_H) } else { (sw, sh) };
+    // 原包日志写死 `1920x1080`，在 >1080p 的屏幕上就是这个缺陷的来源。
+    // ⚠ 全程用**物理**像素：主屏逻辑尺寸（2048x1152）曾被当成物理值写进窗口，
+    //   结果是压暗层只盖住左上 80%（右侧 512px / 底部 288px 露桌面）。
+    let (px, py, pw, ph, scale) = primary_monitor_physical(app).unwrap_or((0, 0, 1920, 1080, 1.0));
+    let size = if peek {
+        tauri::PhysicalSize::new(
+            (FILTER_W * scale).round() as u32,
+            (FILTER_H * scale).round() as u32,
+        )
+    } else {
+        tauri::PhysicalSize::new(pw as u32, ph as u32)
+    };
     // 预览模式：把后端已经解析好的 animal/presence 放进 query，
     // 否则窗口里的 `get_timer().animalId` 为空（没有真休息在跑），取不到宠物
     let url = if preview {
@@ -210,29 +223,31 @@ pub fn show_animal_overlay(
     } else {
         "index.html#/overlay/animal".to_string()
     };
-    let win = overlay_window(app, "animal-overlay", &url, w, h, true)?;
-    // 即便窗口被复用（如显示器变化），尺寸/位置也要跟随当前模式
-    let _ = win.set_size(tauri::LogicalSize::new(w, h));
+    let win = overlay_window(app, "animal-overlay", &url, size, scale, true)?;
 
     let position = if peek {
-        let x = mx + (sw - w).max(0.0) - PEEK_GAP_RIGHT;
-        let y = my + (sh - h).max(0.0) - PEEK_GAP_BOTTOM;
-        (x, y)
+        (
+            px + (pw - size.width as i32).max(0) - (PEEK_GAP_RIGHT * scale).round() as i32,
+            py + (ph - size.height as i32).max(0) - (PEEK_GAP_BOTTOM * scale).round() as i32,
+        )
     } else {
-        (mx, my) // 铺满主屏：非 peek 模式要盖住整块屏，否则压暗层会露出矩形边
+        (px, py) // 铺满主屏：非 peek 模式要盖住整块屏，否则压暗层会露出矩形边
     };
-    let _ = win.set_position(tauri::LogicalPosition::new(position.0, position.1));
+    // 即便窗口被复用（如显示器变化），尺寸/位置也要跟随当前模式
+    place_overlay_physical(&win, position.0, position.1, size);
     compensate_invisible_frame(&win);
     let _ = win.set_ignore_cursor_events(false);
     let _ = win.show();
+    // show() 之后窗口才真正落到主屏；再钉一次，防 DPI 迟到把尺寸改回去
+    place_overlay_physical(&win, position.0, position.1, size);
 
     ANIMAL_ALIVE.store(true, Ordering::SeqCst);
     log::info!(
-        "[windows] pet overlay created at {},{} {}x{} peek={peek}",
-        position.0 as i32,
-        position.1 as i32,
-        w as u32,
-        h as u32,
+        "[windows] pet overlay created at {},{} {}x{} scale={scale} (physical) peek={peek}",
+        position.0,
+        position.1,
+        size.width,
+        size.height,
     );
     let _ = animal_id;
     Ok(())
@@ -374,14 +389,28 @@ pub fn ensure_desktop_ear(app: &tauri::AppHandle, shared: &Shared) -> tauri::Res
     }
 
     log::info!("[windows] creating the desktop ear");
-    let win = match overlay_window(app, "desktop-ear", "index.html#/overlay/ear", EAR_W, EAR_H, true)
-    {
+    // 小云豆也一律用物理像素：窗口只在创建那一帧靠 `inner_size` 乘 scale，
+    // 再显式 `set_size(PhysicalSize)` 钉死，免得它也被当成逻辑值。
+    let ear_scale = primary_monitor_physical(app).map(|m| m.4).unwrap_or(1.0);
+    let ear_size = tauri::PhysicalSize::new(
+        (EAR_W * ear_scale).round() as u32,
+        (EAR_H * ear_scale).round() as u32,
+    );
+    let win = match overlay_window(
+        app,
+        "desktop-ear",
+        "index.html#/overlay/ear",
+        ear_size,
+        ear_scale,
+        true,
+    ) {
         Ok(w) => w,
         Err(e) => {
             log::warn!("[windows] desktop ear failed: {e}");
             return Err(e);
         }
     };
+    let _ = win.set_size(ear_size);
 
     // 记住的位置：只要还有足够的部分在某个屏幕内就用它（换屏/改分辨率后自动回退默认摆位）
     if let (Some(px), Some(py)) = saved {
