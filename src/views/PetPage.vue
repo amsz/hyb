@@ -12,13 +12,30 @@ const previewAnimal = ref(null);
 const previewPhase = ref("enter");
 const previewVideo = ref(null);
 
-const strategy = computed(() => draft.value?.animalStrategy ?? "random");
 const presence = computed(() => draft.value?.restPresence ?? "accompany");
+/**
+ * 勾选池（唯一入口）：
+ *   1 只 = 固定它；多只 = 在它们之间随机；0 只 = 全部随机。
+ * 旧配置的 animalStrategy="fixed" + selectedAnimalId 由后端迁移成池里只有那一只。
+ */
+const pool = computed(() => draft.value?.enabledAnimalIds ?? []);
+const poolStatus = computed(() => {
+  const ids = pool.value;
+  if (!ids.length) return "全部随机";
+  if (ids.length === 1) {
+    const one = store.animals.find((a) => a.id === ids[0]);
+    return one ? `固定：${one.name}` : "固定这一只";
+  }
+  return "随机抽取";
+});
 
 const syncNotice = computed(() => {
-  if (store.petSync === "fetching") return { title: "还有几只在路上", desc: "它们会自己过来，不用管" };
-  if (store.petSync === "failed")
-    return { title: "有几只还没接来", desc: "网络不太顺，过一会儿自动再试" };
+  // 宠物都在本地：只有“库里一只都没有”时"没接来"才值得提示，
+  // 否则离线/网络不好会让本地宠物页白白揿一张告警卡片。
+  if (store.petSync === "fetching" && store.animals.length === 0)
+    return { title: "正在找宠物", desc: "马上就好" };
+  if (store.petSync === "failed" && store.animals.length === 0)
+    return { title: "宠物库是空的", desc: "本地没找到宠物素材，把宠物文件夹放回 data 目录即可" };
   return null;
 });
 
@@ -31,7 +48,12 @@ const PRESENCES = [
 watch(
   () => store.config,
   (c) => {
-    if (c) draft.value = { ...c, enabledSpecies: [...c.enabledSpecies] };
+    if (c)
+      draft.value = {
+        ...c,
+        enabledSpecies: [...(c.enabledSpecies ?? [])],
+        enabledAnimalIds: [...(c.enabledAnimalIds ?? [])],
+      };
   },
   { immediate: true },
 );
@@ -76,18 +98,26 @@ function onPreviewEnded() {
   previewPhase.value = "idle";
   requestAnimationFrame(() => previewVideo.value?.play().catch(() => {}));
 }
-function isFixed(animalId) {
-  return draft.value?.animalStrategy === "fixed" && draft.value.selectedAnimalId === animalId;
+function inPool(animalId) {
+  return pool.value.includes(animalId);
 }
-function pickFixed(animal) {
+/** 勾选/取消一只宠物：勾 1 只就是“指定”，勾多只就是“随机” */
+function togglePool(animalId, checked) {
   if (!draft.value) return;
-  draft.value.selectedAnimalId = animal.id;
-  draft.value.animalStrategy = "fixed";
+  const current = draft.value.enabledAnimalIds ?? [];
+  draft.value.enabledAnimalIds = checked
+    ? [...new Set([...current, animalId])]
+    : current.filter((id) => id !== animalId);
   save();
 }
-function setStrategy(v) {
+function selectAllPool() {
   if (!draft.value) return;
-  draft.value.animalStrategy = v;
+  draft.value.enabledAnimalIds = store.animals.map((a) => a.id);
+  save();
+}
+function clearPool() {
+  if (!draft.value) return;
+  draft.value.enabledAnimalIds = [];
   save();
 }
 function setPresence(v) {
@@ -117,8 +147,31 @@ async function save() {
     </section>
 
     <template v-if="draft.restPetEnabled">
+      <section class="block">
+        <div class="title">谁来陪你</div>
+        <div class="hint pool-hint">
+          勾选想让它们出现的宠物：勾 1 只＝每次都是它；勾多只＝在勾选的里随机；一只都不勾＝全部随机。
+        </div>
+        <div class="pool-row">
+          <span class="pool-count">
+            已勾选
+            <b>{{ pool.length }}</b>
+            / {{ store.animals.length }} 只
+            <span class="pool-empty">（{{ poolStatus }}）</span>
+          </span>
+          <n-space :size="6">
+            <n-button size="tiny" secondary :disabled="!store.animals.length" @click="selectAllPool">
+              全选
+            </n-button>
+            <n-button size="tiny" secondary :disabled="!pool.length" @click="clearPool">
+              清空
+            </n-button>
+          </n-space>
+        </div>
+      </section>
+
       <div class="pet-grid">
-        <div v-for="animal in store.animals" :key="animal.id" class="pet-card">
+        <div v-for="animal in store.animals" :key="animal.id" class="pet-card" :class="{ picked: inPool(animal.id) }">
           <div class="pet-thumb" :style="{ background: animal.bgColor || '#f2eefb' }">
             <img
               v-if="animal.assets?.thumbnail"
@@ -133,14 +186,13 @@ async function save() {
           </div>
           <div class="pet-actions">
             <n-button size="small" secondary @click="openPreview(animal)">预览</n-button>
-            <n-button
+            <n-checkbox
               size="small"
-              :type="isFixed(animal.id) ? 'primary' : 'default'"
-              secondary
-              @click="pickFixed(animal)"
+              :checked="inPool(animal.id)"
+              @update:checked="(v) => togglePool(animal.id, v)"
             >
-              {{ isFixed(animal.id) ? "已指定" : "指定" }}
-            </n-button>
+              选中
+            </n-checkbox>
           </div>
         </div>
 
@@ -152,16 +204,6 @@ async function save() {
           </div>
         </div>
       </div>
-
-      <section class="block">
-        <div class="title">谁来陪你</div>
-        <n-radio-group :value="strategy" @update:value="setStrategy">
-          <n-space vertical :size="6">
-            <n-radio value="random">随机宠物</n-radio>
-            <n-radio value="fixed">指定宠物</n-radio>
-          </n-space>
-        </n-radio-group>
-      </section>
 
       <section class="block">
         <div class="title">出现方式</div>
@@ -219,6 +261,13 @@ async function save() {
 .block{margin:12px 0;padding:12px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
 .title{margin-bottom:10px;font-size:13px;font-weight:700}
 .hint{margin:-4px 0 10px;font-size:11px;color:var(--muted)}
+.pet-card.picked{border-color:var(--lav-600);box-shadow:0 0 0 1px var(--lav-600) inset}
+.pool-hint{margin:0}
+.pool-row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:10px}
+.pool-count{font-size:11px;color:var(--muted)}
+.pool-count b{color:var(--lav-600);font-weight:700}
+.pool-empty{color:var(--muted)}
+.pet-actions :deep(.n-checkbox__label){font-size:11px}
 .presence{display:grid;grid-template-columns:1fr;gap:8px}
 .presence-card{display:grid;grid-template-columns:72px 1fr;grid-template-rows:auto auto;column-gap:10px;padding:10px;border:1px solid var(--border);border-radius:14px;background:transparent;color:inherit;text-align:left;cursor:pointer}
 .presence-card.active{border-color:var(--lav-600);background:var(--key-bg)}

@@ -63,18 +63,33 @@ fn idle_seconds() -> u64 {
     0
 }
 
-/// 按 strategy 选一只宠物（random | dailyRotate | fixed | byTimeSlot）
-fn pick_animal(shared: &Shared) -> String {
-    let (strategy, wanted) = {
+/// 按 strategy 选一只宠物（random | dailyRotate | fixed | byTimeSlot）。
+///
+/// `enabledAnimalIds`（宠物页复选框）只作用于随机类策略：
+/// 勾了若干只 → 在这几只里随机；一只都没勾 → 全部宠物参与。
+pub(crate) fn pick_animal(shared: &Shared) -> String {
+    let (strategy, wanted, pool) = {
         let guard = lock(shared);
-        (guard.config.animal_strategy.clone(), guard.config.selected_animal_id.clone())
+        (
+            guard.config.animal_strategy.clone(),
+            guard.config.selected_animal_id.clone(),
+            guard.config.enabled_animal_ids.clone(),
+        )
     };
-    let list = animals::list();
-    if list.is_empty() {
+    let all = animals::list();
+    if all.is_empty() {
         return String::new();
     }
+    // 池子里只留还存在的宠物；勾选的都不在了就当没勾（fail-open，别让休息没宠物看）
+    let picked: Vec<animals::Animal> = if pool.is_empty() {
+        Vec::new()
+    } else {
+        all.iter().filter(|a| pool.iter().any(|id| id == &a.id)).cloned().collect()
+    };
+    let list: &[animals::Animal] = if picked.is_empty() { &all } else { &picked };
+
     match strategy.as_str() {
-        "fixed" if list.iter().any(|a| a.id == wanted) => wanted,
+        "fixed" if all.iter().any(|a| a.id == wanted) => wanted,
         "dailyRotate" => {
             let day = chrono::Local::now().date_naive().num_days_from_ce() as usize;
             list[day % list.len()].id.clone()
@@ -84,10 +99,23 @@ fn pick_animal(shared: &Shared) -> String {
             list[(hour / 4) % list.len()].id.clone()
         }
         _ => {
-            let idx = chrono::Local::now().timestamp_subsec_millis() as usize % list.len();
+            let idx = pseudo_random_index(list.len());
             list[idx].id.clone()
         }
     }
+}
+
+/// 无 rand 依赖时的随机下标：纳秒时间戳 → 混淆后再取模，避免固定毫秒造成的偏向。
+fn pseudo_random_index(len: usize) -> usize {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.subsec_nanos() as u64)
+        .unwrap_or(0);
+    let spiced = nanos
+        .wrapping_mul(0x9E37_79B9_7F4A_7C15)
+        .rotate_left(17)
+        ^ std::process::id() as u64;
+    (spiced >> 8) as usize % len
 }
 
 fn emit_tick(app: &tauri::AppHandle, shared: &Shared) {

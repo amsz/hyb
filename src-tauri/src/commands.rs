@@ -34,6 +34,11 @@ pub async fn save_config(
         let mut guard = lock(&shared);
         let old = guard.config.clone();
         guard.config = config;
+        // 宠物的唯一入口是“勾选池”（enabledAnimalIds）：
+        // 池里只有 1 只时同步写回 selectedAnimalId，旧版本/原包读到的“指定宠物”仍一致。
+        if guard.config.enabled_animal_ids.len() == 1 {
+            guard.config.selected_animal_id = guard.config.enabled_animal_ids[0].clone();
+        }
         let cfg = guard.config.clone();
         let _ = crate::state::save_config(&cfg);
 
@@ -317,9 +322,11 @@ pub async fn preview_rest_presence(
         log::info!("[windows] preview skipped: a real rest is running");
         return Ok(());
     }
-    let id = animal_id
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| lock(&shared).config.selected_animal_id.clone());
+    let id = match animal_id.filter(|s| !s.is_empty()) {
+        Some(id) => id,
+        // 没明确指定（点“出现方式”试看）：按当前策略选，随机模式就从复选框池子里抽
+        None => timer::pick_animal(&shared),
+    };
     if id.is_empty() || animals::get(&id).is_none() {
         if let Some(a) = animals::list().into_iter().next() {
             // 没指定就用库里第一只

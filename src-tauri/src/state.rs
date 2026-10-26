@@ -18,8 +18,9 @@ use std::sync::{Arc, Mutex};
 pub const APP_DIR_NAME: &str = "top.huyanbao.dev";
 
 /// 是否允许与 huyanbao.cc / api.huyanbao.cc / pets.huyanbao.workers.dev 通讯。
-/// 当前为 **false（离线）**：不拉宠物库、不检查更新、不上报、不注入 tongji.js。
-/// 发布时改回 `true` 即可恢复原包的联网行为。
+/// **保持 false（纯离线）**：不拉宠物库、不检查更新、不上报、不注入 tongji.js。
+/// 打包脚本（`package.ps1 -Production`）也不再翻转它 —— 宠物/资源全部走本地。
+/// 确实需要恢复原包联网行为时，手动改这一个常量。
 pub const ALLOW_HUYANBAO_NET: bool = false;
 
 /// 开发构建开关。**必须与 `APP_DIR_NAME` / tauri.conf.json 的 identifier 同步修改**：
@@ -171,6 +172,10 @@ pub struct AppConfig {
     pub selected_animal_id: String,
     pub animal_strategy: String, // random | dailyRotate | fixed | byTimeSlot
     pub enabled_species: Vec<String>,
+    /// 随机模式下“参与抽取”的宠物 id 集合（宠物页复选框多选）。
+    /// 空 = 全部宠物都参与；被勾选的都已在本地宠物库里删除时也回退为全部。
+    #[serde(default)]
+    pub enabled_animal_ids: Vec<String>,
     pub dim_opacity: u32,
     pub rest_presence: String, // peek | accompany | focus
     pub rest_pet_enabled: bool,
@@ -232,6 +237,7 @@ impl Default for AppConfig {
             selected_animal_id: String::new(),
             animal_strategy: "random".into(),
             enabled_species: vec![],
+            enabled_animal_ids: vec![],
             dim_opacity: 28,
             rest_presence: "peek".into(),
             rest_pet_enabled: true,
@@ -286,6 +292,19 @@ impl AppConfig {
         // v4：工作时间段（旧配置缺字段时由 serde default 兜底，这里再保证非空）
         if cfg.work_ranges.is_empty() {
             cfg.work_ranges = default_work_ranges();
+        }
+        // v5：随机/指定合并成“勾选池”：
+        //   池里 1 只 = 固定它；多只 = 在它们之间随机；0 只 = 全部随机。
+        // 旧的 animalStrategy="fixed" + selectedAnimalId 等价转换成“池里只有那一只”。
+        if cfg.animal_strategy == "fixed" {
+            if cfg.enabled_animal_ids.is_empty() && !cfg.selected_animal_id.is_empty() {
+                cfg.enabled_animal_ids = vec![cfg.selected_animal_id.clone()];
+            }
+            cfg.animal_strategy = "random".into();
+            log::info!(
+                "[config] pet strategy merged into the checkbox pool: {:?}",
+                cfg.enabled_animal_ids
+            );
         }
         cfg
     }
