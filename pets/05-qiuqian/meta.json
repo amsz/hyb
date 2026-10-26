@@ -1,0 +1,11 @@
+{
+  "id": "05-qiuqian",
+  "name": "秋千鱼",
+  "description": "坐在秋千上吹笛子，陪你慢慢歇一会儿",
+  "species": "fish",
+  "rarity": "common",
+  "personality": "calm",
+  "bgColor": "#0B0E0D",
+  "anchorX": 0.5,
+  "scale": 0.78
+}

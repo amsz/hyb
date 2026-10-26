@@ -1,0 +1,11 @@
+{
+  "id": "tabbycat",
+  "name": "小虎",
+  "description": "精神满满的小虎，提醒你起身活动*o*",
+  "species": "cat",
+  "rarity": "rare",
+  "personality": "curious",
+  "bgColor": "#0B0E0D",
+  "anchorX": 0.5,
+  "scale": 0.78
+}

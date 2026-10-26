@@ -1,0 +1,11 @@
+{
+  "id": "03-dafeiyu",
+  "name": "大肥鱼",
+  "description": "吃白饭的蓝色大肥鱼，伸个懒腰提醒你该歇会儿了",
+  "species": "fish",
+  "rarity": "common",
+  "personality": "leisurely",
+  "bgColor": "#0B0E0D",
+  "anchorX": 0.5,
+  "scale": 0.78
+}

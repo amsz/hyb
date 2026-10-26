@@ -1,0 +1,11 @@
+{
+  "id": "04-ganfan",
+  "name": "干饭鱼",
+  "description": "先扒一碗白饭再说，吃饱了哼两句给你听",
+  "species": "fish",
+  "rarity": "common",
+  "personality": "leisurely",
+  "bgColor": "#0B0E0D",
+  "anchorX": 0.5,
+  "scale": 0.78
+}

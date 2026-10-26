@@ -1,0 +1,11 @@
+{
+  "id": "01-eee",
+  "name": "鹅鹅鹅",
+  "description": "在你屏幕拉一泡屎再走",
+  "species": "goose",
+  "rarity": "common",
+  "personality": "calm",
+  "bgColor": "#0B0E0D",
+  "anchorX": 0.5,
+  "scale": 0.78
+}
