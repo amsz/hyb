@@ -12,6 +12,7 @@
 huyanbao-rebuild/
 ├─ index.html                 Vite 入口（原包 index.html 还原）
 ├─ package.json / vite.config.js
+├─ pets/                      ★ 随包宠物素材（打包时复制到 `stage\pets\`，exe 同级，优先级最高）
 ├─ src/                       Vue 3 + naive-ui 前端
 │  ├─ main.js  App.vue  router.js
 │  ├─ store/app.js            全局状态（对应原包 Gl store）
@@ -111,14 +112,17 @@ cmd //c src-tauri\cargo-env.bat run   # 终端 B：或直接双击 target\debug\
 | 日志目录 | `%LOCALAPPDATA%\top.huyanbao.dev\logs` | 同上 | `state.rs::data_dir/log_dir` |
 | 自启计划任务 | `HuyanBao Dev Auto Start` | `HuyanBao Auto Start` | `state.rs::AUTOSTART_TASK` |
 | 更新计划任务 | `Update HuyanBao Dev - Skip UAC` | `Update HuyanBao - Skip UAC` | `updater.rs::TASK_NAME` |
-| 遥测 / 自更新 | 关闭（启动日志可见） | 开启 | `state.rs::IS_DEV` + `lib.rs` |
+| 遥测 / 自更新 / 宠物同步 | 关闭（启动日志可见） | 同样关闭（`ALLOW_HUYANBAO_NET=false`，纯本地） | `state.rs::IS_DEV` / `ALLOW_HUYANBAO_NET` |
 
 **三处（identifier / APP_DIR_NAME / IS_DEV）必须同步改**，否则会与已安装的护眼宝抢
 `config.json`、热键和计划任务。
 
-宠物：dev 数据目录是空的，启动会打 `[animals] no root has usable ids`。已把 5 只复制到
-`%APPDATA%\top.huyanbao.dev\pets\`，并把 tabbycat 放进 `target\debug\_up_\resources\pets\`
-（对应 `search_roots` 的两条根），重启后不再告警。
+宠物：5 只素材在仓库 `pets/`（≈32MB 二进制，`.revision` 已剔除），打包时复制到 `stage\pets\`
+（exe 同级）。`search_roots()` 的优先级是
+`<exe>\pets` → `%APPDATA%\<identifier>\pets` → `<exe>\_up_\resources\pets` → `resources` 等，
+先扫到的先占坑（`list()` 按 id 去重）。所以换/改随包宠物只要换目录里的文件夹，不用重打包 exe；
+开发时也可以拷一份到 `src-tauri\target\debug\pets\`。若要用 Git 跟踪这 32MB，建议上 LFS。
+所以开发时也可以直接拷一份到 `src-tauri\target\debug\pets\`。
 
 ### 运行验证结果（2026-10-13）
 
@@ -232,8 +236,10 @@ release 下生效 —— 打 `cargo-env.bat build --release` 后就没了。
 - 仓库曾含两份从原包提取的素材，现已替换为紫色主题的自定义品牌资源：
   - `src-tauri/icons/icon.ico` ← 自定义图标（原 exe `RT_GROUP_ICON`/`RT_ICON` 还原版备份为 `icon.original.ico`）
   - `src/assets/logo.png` ← 标题栏/侧栏/关于页/favicon 的 UI 品牌图（与图标同图，256×256）；原包 data-URL 还原的 `logo.svg` 已移除
-- 默认构建是**离线**的（`state::ALLOW_HUYANBAO_NET = false`）：不拉宠物库、不检查更新、
-  不上报、不注入 `tongji.js`。需要恢复原包联网行为时改这一个常量即可。
+- 构建产物**一律离线**（`state::ALLOW_HUYANBAO_NET = false`，`package.ps1 -Production` 也不再翻转）：
+  不拉宠物库、不检查更新、不上报、不注入 `tongji.js`，宠物/资源全部读本地。
+  日志可验：`[pets] offline policy: pet store sync disabled`、`[updater] disabled (dev=false, allow_net=false)`、
+  `[reporter] disabled (telemetry off)`。需要恢复原包联网行为时手动改这一个常量。
 
 ## Git
 

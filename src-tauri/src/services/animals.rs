@@ -69,20 +69,28 @@ struct MetaFile {
     scale: f32,
 }
 
-/// 宠物资源目录候选（实测命中两处）：
-///  1. 数据目录（镜像同步下来）`%APPDATA%\top.huyanbao.desktop\pets` —— 4 只，带 `.revision`
-///  2. 安装目录随包资源 `护眼宝\_up_\resources\pets` —— tabbycat（自带 index.json，无 .revision）
-///     对应 exe 中 `_up_` / `resources` / `pets` 字面量与日志 `library=1`（仅内置那只时）
-///  3. 其余 exe 中出现的相对根：`pets`、`resources`、`../resources`、`../../resources`
+/// 宠物资源目录候选（**按优先级排序，先扫到的先占坑**——`list()` 按 id 去重，先到先得）：
+///  1. `<exe目录>\pets` —— 便携包随包素材，**最高优先级**（想换/改宠物直接换这个目录）
+///  2. 数据目录（下载安装下来）`%APPDATA%\top.huyanbao.desktop\pets`
+///  3. 安装目录随包资源 `<exe目录>\_up_\resources\pets`（原安装器遗留，内置 tabbycat）
+///  4. exe 中出现的其余相对根：`resources`、`../resources`、`../../resources`
+///
+/// 证据：exe 字符串 `petsresources../resources../../resources_up_animalscats`（连排的 rodata）、
+/// 以及 `<exe>\_up_\resources\pets\tabbycat` 的实际布局。
 pub fn search_roots() -> Vec<PathBuf> {
-    let mut roots = vec![crate::state::data_dir().join("pets")];
     let exe_dir = std::env::current_exe()
         .ok()
         .and_then(|p| p.parent().map(|d| d.to_path_buf()))
         .unwrap_or_else(|| PathBuf::from("."));
-    // 随包资源（内置 tabbycat）
-    roots.push(exe_dir.join("_up_").join("resources").join("pets"));
-    for rel in ["pets", "resources", "../resources", "../../resources"] {
+    let mut roots = vec![
+        // 1. 同级 pets：便携包自带，优先级最高
+        exe_dir.join("pets"),
+        // 2. 数据目录（petstore 下载安装 / 手动放）
+        crate::state::data_dir().join("pets"),
+        // 3. 安装器随包资源
+        exe_dir.join("_up_").join("resources").join("pets"),
+    ];
+    for rel in ["resources", "../resources", "../../resources"] {
         roots.push(exe_dir.join(rel));
     }
     roots
@@ -126,7 +134,7 @@ fn load_animal(dir: &Path) -> Option<Animal> {
     })
 }
 
-/// 扫描全部根目录，按 id 去重（同名后者不覆盖先者）
+/// 扫描全部根目录，按 id 去重（**先扫到的根优先**，所以 `search_roots()` 的顺序就是优先级）
 pub fn list() -> Vec<Animal> {
     let mut out: Vec<Animal> = Vec::new();
     let mut usable_roots = 0usize;

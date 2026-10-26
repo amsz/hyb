@@ -66,6 +66,14 @@ pub async fn save_config(
         if old.input_stats_enabled != cfg.input_stats_enabled {
             changed.push("activity");
         }
+        // 宠物勾选池变了才记一行（排查“池子被改”时看这条）
+        if old.enabled_animal_ids != cfg.enabled_animal_ids {
+            log::info!(
+                "[config] pet pool -> {:?} (selected={})",
+                cfg.enabled_animal_ids,
+                cfg.selected_animal_id
+            );
+        }
         if old.eye_enabled != cfg.eye_enabled
             || old.filter_strength != cfg.filter_strength
             || old.overlay_strength != cfg.overlay_strength

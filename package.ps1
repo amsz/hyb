@@ -5,7 +5,7 @@
 .DESCRIPTION
   1. 前端  : npm run build            -> dist/（release 构建会把它内嵌进 exe）
   2. 后端  : src-tauri\cargo-env.bat build --release  -> target\release\huyanbao.exe
-  3. 组装  : release\huyanbao-<版本>-win-x64\huyanbao.exe + 使用说明.txt
+  3. 组装  : release\huyanbao-<版本>-win-x64\huyanbao.exe + pets\ + 使用说明.txt
   4. 压缩  : release\huyanbao-<版本>-win-x64-portable.zip + SHA256
 
   运行前置：已安装 WebView2 Runtime（Win10/11 与 Edge 一般自带）。
@@ -18,7 +18,8 @@
 #>
 [CmdletBinding()]
 param(
-    # 按“正式版”配置打包：identifier / IS_DEV / ALLOW_HUYANBAO_NET 三处切回原包值（构建后自动还原）
+    # 按“正式版”配置打包：identifier / APP_DIR_NAME / IS_DEV 三处切回原包值（构建后自动还原）。
+    # 注意：ALLOW_HUYANBAO_NET 不在切换列表里 —— 打包产物保持**离线**（不拉宠物库/不查更新/不遥测）。
     [switch]$Production,
     # 额外用 tauri build 出 NSIS 安装包（需要联网拉 NSIS，失败不阻断便携包）
     [switch]$Installer,
@@ -71,8 +72,7 @@ if (-not $SkipFrontend) {
 $targets = @(
     @{ File = (Join-Path $Tauri "tauri.conf.json"); Old = '"identifier": "top.huyanbao.dev"'; New = '"identifier": "top.huyanbao.desktop"' },
     @{ File = (Join-Path $Tauri "src\state.rs");    Old = 'pub const APP_DIR_NAME: &str = "top.huyanbao.dev";';   New = 'pub const APP_DIR_NAME: &str = "top.huyanbao.desktop";' },
-    @{ File = (Join-Path $Tauri "src\state.rs");    Old = 'pub const IS_DEV: bool = true;';                        New = 'pub const IS_DEV: bool = false;' },
-    @{ File = (Join-Path $Tauri "src\state.rs");    Old = 'pub const ALLOW_HUYANBAO_NET: bool = false;';           New = 'pub const ALLOW_HUYANBAO_NET: bool = true;' }
+    @{ File = (Join-Path $Tauri "src\state.rs");    Old = 'pub const IS_DEV: bool = true;';                        New = 'pub const IS_DEV: bool = false;' }
 )
 
 function Set-ProductionFlags {
@@ -98,10 +98,10 @@ if (-not $SkipBackend) {
     $swapped = $false
     try {
         if ($Production) {
-            Write-Step "切换为正式版配置 (identifier / IS_DEV / ALLOW_HUYANBAO_NET)"
+            Write-Step "切换为正式版配置 (identifier / APP_DIR_NAME / IS_DEV)"
             Set-ProductionFlags
             $swapped = $true
-            Write-Ok "3 处配置已切换（构建结束后自动还原）"
+            Write-Ok "3 处配置已切换（保持离线，构建结束后自动还原）"
         }
 
         Push-Location $Tauri
@@ -132,6 +132,20 @@ if (Test-Path $Stage) { Remove-Item $Stage -Recurse -Force }
 New-Item -ItemType Directory -Path $Stage -Force | Out-Null
 Copy-Item $ExeSrc (Join-Path $Stage "huyanbao.exe")
 
+# ---------------------------------------------------------------- 3b. 宠物素材（随包，exe 同级 pets\）
+# 程序启动时按 `<exe目录>\pets` → `%APPDATA%\…\pets` → `<exe>\_up_\resources\pets` 的顺序扫，
+# 同级 pets 优先级最高：换/改宠物直接替换这个目录即可，不用重新打包 exe。
+$PetsSrc = Join-Path $Root "pets"
+if (Test-Path $PetsSrc) {
+    Write-Step "复制宠物素材 pets\\"
+    Copy-Item $PetsSrc (Join-Path $Stage "pets") -Recurse -Force
+    $petDirs = Get-ChildItem (Join-Path $Stage "pets") -Directory
+    $petMB = [math]::Round((Get-ChildItem (Join-Path $Stage "pets") -Recurse -File | Measure-Object Length -Sum).Sum/1MB,1)
+    Write-Ok "$($petDirs.Count) 只宠物 / $petMB MB（$(($petDirs | ForEach-Object Name) -join ', ')）"
+} else {
+    Write-Host "    WARN  $PetsSrc 不存在，便携包将不含宠物素材" -ForegroundColor Yellow
+}
+
 $readme = @"
 护眼宝 $Version —— 便携版（win-x64）
 ================================================
@@ -140,14 +154,21 @@ $readme = @"
   双击 huyanbao.exe 即可，无需安装。
   需要 WebView2 Runtime（Win10/11 与 Edge 一般自带）。
 
+【宠物】
+  素材在同目录的 pets\ 文件夹里（每只一个子目录，含 meta.json / enter.webm /
+  idle.webm / thumbnail.png），启动时从 exe 所在目录读取。
+  · 想换/增加宠物：直接把文件夹放进 pets\ 即可，不用重新打包
+  · pets\ 优先级最高，会盖住 %APPDATA% 里的同名宠物
+  · 删掉 pets\ 也能跑，但宠物库会变空（此时只剩数据目录里已下载的那几只）
+
 【数据目录】
   配置/统计/宠物   %APPDATA%\top.huyanbao.desktop\
   日志/WebView 缓存 %LOCALAPPDATA%\top.huyanbao.desktop\
 
 【说明】
   本包由 huyanbao.exe 0.1.4 逆向重建而来，版权归原 HuyanBao Team。
-  若以 -Production 参数打包，则 identifier / 数据目录 / 联网策略与原包一致；
-  默认（Dev）构建使用 top.huyanbao.dev 标识且完全离线，不会与 huyanbao.cc 通信。
+  若以 -Production 参数打包，则 identifier / 数据目录与原包一致；
+  网络一律保持关闭（宠物库、更新、遥测均走本地/离线，不会向 huyanbao.cc 发请求）。
 "@
 [System.IO.File]::WriteAllText((Join-Path $Stage "使用说明.txt"), $readme, (New-Object Text.UTF8Encoding $false))
 
