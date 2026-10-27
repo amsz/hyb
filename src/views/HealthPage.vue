@@ -118,6 +118,7 @@ watch(
 );
 
 function setRangeStart(i, e) {
+  if (!plan.value?.workScheduleEnabled) return; // 未启用时只显示不响应
   const v = e.target.value;
   if (!v) return;
   const r = plan.value.workRanges[i];
@@ -129,6 +130,7 @@ function setRangeStart(i, e) {
   plan.value.workRanges = plan.value.workRanges.map((x, j) => (j === i ? { ...x, start: v } : x));
 }
 function setRangeEnd(i, e) {
+  if (!plan.value?.workScheduleEnabled) return;
   const v = e.target.value;
   if (!v) return;
   const r = plan.value.workRanges[i];
@@ -140,10 +142,12 @@ function setRangeEnd(i, e) {
   plan.value.workRanges = plan.value.workRanges.map((x, j) => (j === i ? { ...x, end: v } : x));
 }
 function addRange() {
+  if (!plan.value?.workScheduleEnabled) return;
   if (rangeError.value) return; // 还有非法时间段时不允许继续加
   plan.value.workRanges = [...plan.value.workRanges, { start: "14:00", end: "18:00" }];
 }
 function dropRange(i) {
+  if (!plan.value?.workScheduleEnabled) return;
   if (plan.value.workRanges.length <= 1) return;
   plan.value.workRanges = plan.value.workRanges.filter((_, j) => j !== i);
 }
@@ -158,15 +162,18 @@ const weekSkipped = computed(() => sum("restSkipped"));
 </script>
 
 <template>
-  <div v-if="store.stats" class="page">
-    <h2>今日健康</h2>
+  <div class="page">
+    <!-- 只有统计卡片依赖 store.stats；下面的趋势/休息计划不依赖 -->
+    <template v-if="store.stats">
+      <h2>今日健康</h2>
 
-    <div class="grid">
-      <div v-for="c in cards" :key="c.label" class="stat">
-        <div class="value">{{ c.value }}</div>
-        <div class="label">{{ c.label }}</div>
+      <div class="grid">
+        <div v-for="c in cards" :key="c.label" class="stat">
+          <div class="value">{{ c.value }}</div>
+          <div class="label">{{ c.label }}</div>
+        </div>
       </div>
-    </div>
+    </template>
 
     <section class="trend">
       <div class="trend-head">
@@ -211,22 +218,33 @@ const weekSkipped = computed(() => sum("restSkipped"));
           />
         </div>
 
-        <template v-if="plan.workScheduleEnabled">
+        <!-- 时间段常显：未启用时置灰只读，避免"功能不见了" -->
+        <div class="ranges" :class="{ off: !plan.workScheduleEnabled }">
           <div v-for="(r, i) in plan.workRanges" :key="i" class="time-row">
             <label>
               开始
-              <input type="time" :value="r.start" @change="setRangeStart(i, $event)" />
+              <input
+                type="time"
+                :value="r.start"
+                :disabled="!plan.workScheduleEnabled"
+                @change="setRangeStart(i, $event)"
+              />
             </label>
             <span>至</span>
             <label>
               结束
-              <input type="time" :value="r.end" @change="setRangeEnd(i, $event)" />
+              <input
+                type="time"
+                :value="r.end"
+                :disabled="!plan.workScheduleEnabled"
+                @change="setRangeEnd(i, $event)"
+              />
             </label>
             <button
               class="range-drop"
               type="button"
               title="删除这一段"
-              :disabled="plan.workRanges.length <= 1"
+              :disabled="!plan.workScheduleEnabled || plan.workRanges.length <= 1"
               @click="dropRange(i)"
             >
               ×
@@ -235,14 +253,19 @@ const weekSkipped = computed(() => sum("restSkipped"));
           <button
             class="range-add"
             type="button"
-            :disabled="!!rangeError"
+            :disabled="!plan.workScheduleEnabled || !!rangeError"
             @click="addRange"
           >
             + 再加一段
           </button>
-          <div v-if="rangeError" class="range-error">{{ rangeError }}</div>
-          <div class="hint range-hint">可分上下午多段，例如 9:00-12:00、13:00-18:00。不支持跨午夜。</div>
-        </template>
+          <div v-if="rangeError && plan.workScheduleEnabled" class="range-error">{{ rangeError }}</div>
+          <div v-if="!plan.workScheduleEnabled" class="hint range-hint">
+            打开上面的开关后，休息计划只在下面这些时段内计时。
+          </div>
+          <div v-else class="hint range-hint">
+            可分上下午多段，例如 9:00-12:00、13:00-18:00。不支持跨午夜。
+          </div>
+        </div>
 
         <div class="row">
           <span class="row-label">工作间隔</span>
@@ -341,6 +364,9 @@ const weekSkipped = computed(() => sum("restSkipped"));
 .switch-title{font-size:13px;font-weight:700}
 .hint{margin-top:3px;font-size:11px;color:var(--muted);line-height:1.5}
 .range-hint{margin:-4px 0 10px}
+.ranges{transition:opacity .2s ease}
+.ranges.off{opacity:.45}
+.ranges.off input,.ranges.off button{cursor:not-allowed}
 .time-row{display:flex;align-items:center;gap:10px;margin-bottom:8px;font-size:12px;color:var(--muted)}
 .time-row input{margin-left:6px;padding:4px 8px;border:1px solid var(--border);border-radius:8px;background:var(--key-bg);color:var(--ink);font-size:12px}
 .range-drop{width:24px;height:24px;padding:0;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--muted);cursor:pointer;line-height:1}
