@@ -98,6 +98,10 @@ function onPreviewEnded() {
   previewPhase.value = "idle";
   requestAnimationFrame(() => previewVideo.value?.play().catch(() => {}));
 }
+/** 点整行（或回车/空格）切换选中；与【出现方式】一样的整行可点交互 */
+function toggleAnimal(animal) {
+  togglePool(animal.id, !inPool(animal.id));
+}
 function inPool(animalId) {
   return pool.value.includes(animalId);
 }
@@ -150,7 +154,7 @@ async function save() {
       <section class="block">
         <div class="title">谁来陪你</div>
         <div class="hint pool-hint">
-          勾选想让它们出现的宠物：勾 1 只＝每次都是它；勾多只＝在勾选的里随机；一只都不勾＝全部随机。
+          点一下宠物条目即可选中/取消（跟下面的出现方式一样）：选 1 只＝每次都是它；选多只＝在选中的里随机；一只都不选＝全部随机。
         </div>
         <div class="pool-row">
           <span class="pool-count">
@@ -168,42 +172,48 @@ async function save() {
             </n-button>
           </n-space>
         </div>
+
+        <div class="pet-grid">
+          <div
+            v-for="animal in store.animals"
+            :key="animal.id"
+            class="pet-card"
+            :class="{ picked: inPool(animal.id) }"
+            role="button"
+            tabindex="0"
+            :aria-pressed="inPool(animal.id)"
+            :title="inPool(animal.id) ? '点一下取消选中' : '点一下选中'"
+            @click="toggleAnimal(animal)"
+            @keydown.enter.prevent="toggleAnimal(animal)"
+            @keydown.space.prevent="toggleAnimal(animal)"
+          >
+            <div class="pet-thumb" :style="{ background: animal.bgColor || '#f2eefb' }">
+              <img
+                v-if="animal.assets?.thumbnail"
+                :src="assetUrl(animal.assets.thumbnail)"
+                :alt="`${animal.name} 缩略图`"
+              />
+              <span v-else>{{ initial(animal) }}</span>
+            </div>
+            <div>
+              <div class="pet-name">{{ animal.name }}</div>
+              <div class="pet-desc">{{ animal.description }}</div>
+            </div>
+            <div class="pet-actions">
+              <!-- 预览只预览，不改选中：拦掉冒泡 -->
+              <n-button size="small" secondary @click.stop="openPreview(animal)">预览</n-button>
+            </div>
+          </div>
+
+          <div v-if="syncNotice" class="pet-card waiting">
+            <div class="pet-thumb waiting-thumb"><span>···</span></div>
+            <div>
+              <div class="pet-name">{{ syncNotice.title }}</div>
+              <div class="pet-desc">{{ syncNotice.desc }}</div>
+            </div>
+          </div>
+        </div>
       </section>
-
-      <div class="pet-grid">
-        <div v-for="animal in store.animals" :key="animal.id" class="pet-card" :class="{ picked: inPool(animal.id) }">
-          <div class="pet-thumb" :style="{ background: animal.bgColor || '#f2eefb' }">
-            <img
-              v-if="animal.assets?.thumbnail"
-              :src="assetUrl(animal.assets.thumbnail)"
-              :alt="`${animal.name} 缩略图`"
-            />
-            <span v-else>{{ initial(animal) }}</span>
-          </div>
-          <div>
-            <div class="pet-name">{{ animal.name }}</div>
-            <div class="pet-desc">{{ animal.description }}</div>
-          </div>
-          <div class="pet-actions">
-            <n-button size="small" secondary @click="openPreview(animal)">预览</n-button>
-            <n-checkbox
-              size="small"
-              :checked="inPool(animal.id)"
-              @update:checked="(v) => togglePool(animal.id, v)"
-            >
-              选中
-            </n-checkbox>
-          </div>
-        </div>
-
-        <div v-if="syncNotice" class="pet-card waiting">
-          <div class="pet-thumb waiting-thumb"><span>···</span></div>
-          <div>
-            <div class="pet-name">{{ syncNotice.title }}</div>
-            <div class="pet-desc">{{ syncNotice.desc }}</div>
-          </div>
-        </div>
-      </div>
 
       <section class="block">
         <div class="title">出现方式</div>
@@ -249,10 +259,13 @@ async function save() {
 <style scoped>
 /* 还原自 huyanbao.exe 内嵌 bundle 的 scoped 样式（原作用域 data-v-12fc8f7d） */
 .page h2{margin:0 0 12px;font-size:18px}
-.pet-card{display:grid;grid-template-columns:72px 1fr auto;gap:10px;align-items:center;padding:10px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+/* 宠物列表：与【出现方式】完全同构（同间隙、同边框、同底色） */
+.pet-grid{display:grid;grid-template-columns:1fr;gap:4px}
+.pet-card{display:grid;grid-template-columns:72px 1fr auto;gap:10px;align-items:center;padding:10px;border:1px solid var(--border);border-radius:14px;background:transparent;color:inherit;text-align:left;cursor:pointer}
+.pet-card:focus-visible{outline:2px solid var(--lav-500);outline-offset:2px}
 .pet-actions{display:flex;flex-direction:column;gap:6px}
 .pet-thumb{width:72px;height:58px;display:grid;place-items:center;border-radius:14px;color:#fff;font-size:24px;font-weight:800;box-shadow:inset 0 0 0 1px #ffffff2e;overflow:hidden}
-.waiting{border-style:dashed;background:transparent}
+.waiting{border-style:dashed;background:transparent;cursor:default}
 .waiting .pet-name,.waiting .pet-desc{color:var(--muted)}
 .waiting-thumb{background:transparent;border:1px dashed var(--border);box-shadow:none;color:var(--muted);font-size:18px;letter-spacing:2px}
 .pet-thumb img{max-width:100%;max-height:100%;object-fit:contain}
@@ -261,14 +274,14 @@ async function save() {
 .block{margin:12px 0;padding:12px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
 .title{margin-bottom:10px;font-size:13px;font-weight:700}
 .hint{margin:-4px 0 10px;font-size:11px;color:var(--muted)}
-.pet-card.picked{border-color:var(--lav-600);box-shadow:0 0 0 1px var(--lav-600) inset}
+/* 选中态 = 【出现方式】里 .presence-card.active：紫边框 + 淡紫底（无阴影） */
+.pet-card.picked{border-color:var(--lav-600);background:var(--key-bg)}
 .pool-hint{margin:0}
-.pool-row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:10px}
+.pool-row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 10px}
 .pool-count{font-size:11px;color:var(--muted)}
 .pool-count b{color:var(--lav-600);font-weight:700}
 .pool-empty{color:var(--muted)}
-.pet-actions :deep(.n-checkbox__label){font-size:11px}
-.presence{display:grid;grid-template-columns:1fr;gap:8px}
+.presence{display:grid;grid-template-columns:1fr;gap:4px}
 .presence-card{display:grid;grid-template-columns:72px 1fr;grid-template-rows:auto auto;column-gap:10px;padding:10px;border:1px solid var(--border);border-radius:14px;background:transparent;color:inherit;text-align:left;cursor:pointer}
 .presence-card.active{border-color:var(--lav-600);background:var(--key-bg)}
 .presence-preview{grid-row:1/span 2;position:relative;width:72px;height:52px;border-radius:10px;background:#f5f2fc;overflow:hidden}
