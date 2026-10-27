@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onMounted, ref, watch } from "vue";
+import { onBeforeRouteLeave } from "vue-router";
 import { getStatsHistory } from "../lib/ipc";
 import { useAppStore } from "../store/app";
 
@@ -92,6 +93,12 @@ const streak = computed(() => {
 // ---- 休息计划（从宠物页迁入） ----
 const plan = ref(null);
 const rangeError = ref("");
+const saving = ref(false);
+const saveError = ref("");
+/** 最近一次保存成功的时间，用于给“已保存”一个可见凭据 */
+const savedAt = ref(null);
+const pad2 = (n) => String(n).padStart(2, "0");
+const hhmm = (d) => `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 
 function normalizeRanges(list) {
   const valid = (Array.isArray(list) ? list : [])
@@ -100,22 +107,52 @@ function normalizeRanges(list) {
   return valid.length ? valid : [{ start: "09:00", end: "18:00" }];
 }
 
+function planFromConfig(c) {
+  return {
+    workMinutes: c.workMinutes,
+    shortRestMinutes: c.shortRestMinutes,
+    longRestEvery: c.longRestEvery,
+    longRestMinutes: c.longRestMinutes,
+    idlePauseMinutes: c.idlePauseMinutes,
+    workScheduleEnabled: c.workScheduleEnabled ?? false,
+    workRanges: normalizeRanges(c.workRanges),
+  };
+}
+
+/** 有未保存的改动（用于按钮置灰/提示/离开确认） */
+const dirty = computed(() => {
+  const p = plan.value;
+  const c = store.config;
+  if (!p || !c) return false;
+  const saved = planFromConfig(c);
+  return (
+    p.workMinutes !== saved.workMinutes ||
+    p.shortRestMinutes !== saved.shortRestMinutes ||
+    p.longRestEvery !== saved.longRestEvery ||
+    p.longRestMinutes !== saved.longRestMinutes ||
+    p.idlePauseMinutes !== saved.idlePauseMinutes ||
+    !!p.workScheduleEnabled !== !!saved.workScheduleEnabled ||
+    JSON.stringify(p.workRanges) !== JSON.stringify(saved.workRanges)
+  );
+});
+
 watch(
   () => store.config,
   (c) => {
     if (!c) return;
-    plan.value = {
-      workMinutes: c.workMinutes,
-      shortRestMinutes: c.shortRestMinutes,
-      longRestEvery: c.longRestEvery,
-      longRestMinutes: c.longRestMinutes,
-      idlePauseMinutes: c.idlePauseMinutes,
-      workScheduleEnabled: c.workScheduleEnabled ?? false,
-      workRanges: normalizeRanges(c.workRanges),
-    };
+    // 别处保存配置（如切暂停/改宠物）会广播 config:changed；
+    // 本地有未保存改动时保留用户正在编辑的内容
+    if (dirty.value && plan.value) return;
+    plan.value = planFromConfig(c);
   },
   { immediate: true },
 );
+
+// 有未保存改动时离开健康页先问一句，避免“改完就没了”
+onBeforeRouteLeave(() => {
+  if (!dirty.value || saving.value) return true;
+  return window.confirm("休息计划有未保存的修改，确定离开？");
+});
 
 function setRangeStart(i, e) {
   if (!plan.value?.workScheduleEnabled) return; // 未启用时只显示不响应
@@ -152,7 +189,17 @@ function dropRange(i) {
   plan.value.workRanges = plan.value.workRanges.filter((_, j) => j !== i);
 }
 async function savePlan() {
-  if (plan.value) await store.patchConfig({ ...plan.value });
+  if (!plan.value || saving.value || !dirty.value) return;
+  saving.value = true;
+  saveError.value = "";
+  try {
+    await store.patchConfig({ ...plan.value });
+    savedAt.value = new Date();
+  } catch (err) {
+    saveError.value = err instanceof Error ? err.message : String(err);
+  } finally {
+    saving.value = false;
+  }
 }
 
 const sum = (key) => history.value.reduce((acc, row) => acc + (row[key] ?? 0), 0);
@@ -323,7 +370,14 @@ const weekSkipped = computed(() => sum("restSkipped"));
           <span class="row-value">{{ plan.idlePauseMinutes }} 分钟</span>
         </div>
 
-        <n-button type="primary" @click="savePlan">保存</n-button>
+        <div class="save-row">
+          <n-button type="primary" :loading="saving" :disabled="!dirty || saving" @click="savePlan">
+            {{ dirty ? "保存" : "已保存" }}
+          </n-button>
+          <span v-if="saveError" class="save-msg err">保存失败：{{ saveError }}</span>
+          <span v-else-if="dirty" class="save-msg">有未保存的修改</span>
+          <span v-else-if="savedAt" class="save-msg ok">✓ 已保存 {{ hhmm(savedAt) }}</span>
+        </div>
       </div>
     </section>
   </div>
@@ -374,4 +428,8 @@ const weekSkipped = computed(() => sum("restSkipped"));
 .range-add{margin:0 0 8px;padding:4px 10px;border:1px dashed var(--border);border-radius:8px;background:transparent;color:var(--muted);font-size:12px;cursor:pointer}
 .range-add:disabled{opacity:.5;cursor:default}
 .range-error{margin:-4px 0 8px;font-size:11px;color:#e57373}
+.save-row{display:flex;align-items:center;gap:10px;margin-top:2px}
+.save-msg{font-size:11px;color:var(--muted);line-height:1.5}
+.save-msg.ok{color:#43a047}
+.save-msg.err{color:#e57373}
 </style>
