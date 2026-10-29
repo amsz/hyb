@@ -223,7 +223,7 @@ pub fn run() {
         })
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|_app, event| match event {
+        .run(|app, event| match event {
             tauri::RunEvent::ExitRequested { api, .. } => {
                 // 托盘常驻：只有托盘“退出”菜单（request_exit）或 --force-exit 才真正退出
                 if !EXIT_REQUESTED.load(Ordering::SeqCst)
@@ -232,7 +232,13 @@ pub fn run() {
                     api.prevent_exit();
                 }
             }
-            tauri::RunEvent::Exit => timer::shutdown(),
+            tauri::RunEvent::Exit => {
+                // 退出前补存当日统计（否则当天最后一段有效工时/在座时长会丢）
+                if let Some(shared) = app.try_state::<state::Shared>() {
+                    timer::flush_history(&shared);
+                }
+                timer::shutdown()
+            }
             _ => {}
         });
 }

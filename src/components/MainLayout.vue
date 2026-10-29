@@ -21,17 +21,31 @@ const nav = [
 ];
 
 const pad = (n) => String(n).padStart(2, "0");
+/** 秒 → mm:ss（负数钳到 0，避免到点瞬间闪 -1:59） */
+const mmss = (total) => {
+  const t = Math.max(0, Math.floor(total || 0));
+  return `${pad(Math.floor(t / 60))}:${pad(t % 60)}`;
+};
 
-/** 侧栏计时芯片：已暂停 / 休息 mm:ss / 休息倒计时 mm:ss */
+/**
+ * 侧栏计时芯片：
+ *   主行 = 状态 / 休息 mm:ss / 休息倒计时 mm:ss（动作指令，保持原样）
+ *   副行 = **本轮**有效工作时长（每轮休息或段外会归零；今日累计在健康页）
+ */
 const timerChip = computed(() => {
   const t = store.timer;
-  if (!t) return "—";
-  if (t.state === "paused") return "已暂停";
-  if (t.state === "outsideSchedule") return "时段外已暂停";
+  if (!t) return { main: "—", sub: "", idle: false };
+  if (t.state === "paused") return { main: "已暂停", sub: "", idle: false };
+  if (t.state === "outsideSchedule") return { main: "时段外已暂停", sub: "", idle: false };
   if (t.state === "animalShowing") {
-    return `休息 ${pad(Math.floor(t.restRemainingSecs / 60))}:${pad(t.restRemainingSecs % 60)}`;
+    return { main: `休息 ${mmss(t.restRemainingSecs)}`, sub: "", idle: false };
   }
-  return `休息倒计时 ${pad(Math.floor(t.nextRestInSecs / 60))}:${pad(t.nextRestInSecs % 60)}`;
+  const idle = t.activity === "idle";
+  return {
+    main: `休息倒计时 ${mmss(t.nextRestInSecs)}`,
+    sub: `${idle ? "空闲 · " : ""}本轮 ${mmss(t.workElapsedSecs)}`,
+    idle,
+  };
 });
 
 onMounted(() => {
@@ -98,7 +112,10 @@ function closeToTray() {
       </nav>
 
       <div class="sidebar-foot">
-        <div class="timer-chip" @click="store.togglePause()">{{ timerChip }}</div>
+        <div class="timer-chip" :class="{ idle: timerChip.idle }" @click="store.togglePause()">
+          <div class="chip-main">{{ timerChip.main }}</div>
+          <div v-if="timerChip.sub" class="chip-sub">{{ timerChip.sub }}</div>
+        </div>
       </div>
     </aside>
 
@@ -127,7 +144,10 @@ nav{display:flex;flex-direction:column;gap:6px;flex:1}
 .nav-item:hover{background:#b39ddb1f;color:var(--lav-700)}
 .nav-item.active{background:linear-gradient(135deg,#b39ddb3d,#7e57c22e);color:var(--lav-700);font-weight:600}
 .sidebar-foot{margin-top:auto}
-.timer-chip{font-size:11px;padding:8px;border-radius:10px;background:var(--card);border:1px solid var(--border);color:var(--lav-700);text-align:center;cursor:pointer}
+.timer-chip{font-size:11px;padding:8px;border-radius:10px;background:var(--card);border:1px solid var(--border);color:var(--lav-700);text-align:center;cursor:pointer;font-variant-numeric:tabular-nums;transition:opacity .2s ease,color .2s ease}
+.chip-main{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chip-sub{margin-top:3px;font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.timer-chip.idle{opacity:.6}
 .content{min-width:0;min-height:0;overflow:auto;padding:16px 16px 18px}
 .boot{height:100%;display:grid;place-items:center;color:var(--lav-700);background:var(--lav-50)}
 </style>

@@ -19,6 +19,14 @@ function formatDuration(totalSeconds) {
   return m > 0 ? `${m}小时${b}分` : `${b} 分钟`;
 }
 
+/** 紧凑时长 "5h10m" / "45m" / "5h"，只用于卡片标签行右侧的“在座”小字 */
+function formatCompact(totalSeconds) {
+  const h = Math.floor((totalSeconds || 0) / 3600);
+  const m = Math.floor(((totalSeconds || 0) % 3600) / 60);
+  if (h > 0) return m > 0 ? `${h}h${m}m` : `${h}h`;
+  return `${m}m`;
+}
+
 const iso = (d) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
@@ -27,7 +35,11 @@ const cards = computed(() => {
   const s = store.stats;
   if (!s) return [];
   const list = [
-    { label: "连续工作", value: formatDuration(s.workSeconds) },
+    {
+      label: "有效工时",
+      value: formatDuration(s.workSeconds),
+      extra: `在座 ${formatCompact(s.sessionSeconds ?? 0)}`,
+    },
     { label: "已完成休息", value: `${s.restCompleted} 次` },
     { label: "跳过休息", value: `${s.restSkipped} 次` },
   ];
@@ -113,6 +125,7 @@ function planFromConfig(c) {
     shortRestMinutes: c.shortRestMinutes,
     longRestEvery: c.longRestEvery,
     longRestMinutes: c.longRestMinutes,
+    activeIdleSecs: c.activeIdleSecs ?? 30,
     idlePauseMinutes: c.idlePauseMinutes,
     workScheduleEnabled: c.workScheduleEnabled ?? false,
     workRanges: normalizeRanges(c.workRanges),
@@ -130,6 +143,7 @@ const dirty = computed(() => {
     p.shortRestMinutes !== saved.shortRestMinutes ||
     p.longRestEvery !== saved.longRestEvery ||
     p.longRestMinutes !== saved.longRestMinutes ||
+    p.activeIdleSecs !== saved.activeIdleSecs ||
     p.idlePauseMinutes !== saved.idlePauseMinutes ||
     !!p.workScheduleEnabled !== !!saved.workScheduleEnabled ||
     JSON.stringify(p.workRanges) !== JSON.stringify(saved.workRanges)
@@ -217,7 +231,10 @@ const weekSkipped = computed(() => sum("restSkipped"));
       <div class="grid">
         <div v-for="c in cards" :key="c.label" class="stat">
           <div class="value">{{ c.value }}</div>
-          <div class="label">{{ c.label }}</div>
+          <div class="label-row">
+            <span class="label">{{ c.label }}</span>
+            <span v-if="c.extra" class="extra">{{ c.extra }}</span>
+          </div>
         </div>
       </div>
     </template>
@@ -247,7 +264,7 @@ const weekSkipped = computed(() => sum("restSkipped"));
         本周工作 <b>{{ formatDuration(weekWork) }}</b> · 完成 <b>{{ weekDone }}</b> 次休息
         <template v-if="weekSkipped > 0"> · 跳过 <b>{{ weekSkipped }}</b> 次</template>
       </div>
-      <div v-if="hasData" class="legend">柱高为当天工作时长，数字是完成的休息次数</div>
+      <div v-if="hasData" class="legend">柱高为当天有效工时，数字是完成的休息次数</div>
     </section>
 
     <section v-if="plan" class="plan">
@@ -359,7 +376,18 @@ const weekSkipped = computed(() => sum("restSkipped"));
           <span class="row-value">{{ plan.longRestMinutes }} 分钟</span>
         </div>
         <div class="row">
-          <span class="row-label">离开暂停</span>
+          <span class="row-label">键鼠空闲</span>
+          <n-slider
+            v-model:value="plan.activeIdleSecs"
+            :min="10"
+            :max="180"
+            :step="10"
+            style="flex: 1"
+          />
+          <span class="row-value">{{ plan.activeIdleSecs }} 秒</span>
+        </div>
+        <div class="row">
+          <span class="row-label">离开判定</span>
           <n-slider
             v-model:value="plan.idlePauseMinutes"
             :min="1"
@@ -369,6 +397,9 @@ const weekSkipped = computed(() => sum("restSkipped"));
           />
           <span class="row-value">{{ plan.idlePauseMinutes }} 分钟</span>
         </div>
+        <!-- 说明文字：三个片段必须紧贴写（模板里的空白节点会被渲染成一个空格，中文标点前多出空格） -->
+        <!-- prettier-ignore -->
+        <div class="hint plan-hint"><template v-if="plan.activeIdleSecs > 0">超过 <b>{{ plan.activeIdleSecs }}</b> 秒没碰鼠标键盘，就停算<b>有效工时</b>（休息倒计时也跟着停）</template><template v-else><b>键鼠门控已关闭</b>，有效工时按墙钟一直累计</template><template v-if="plan.idlePauseMinutes > 0">；离开超过 <b>{{ plan.idlePauseMinutes }}</b> 分钟，再停算<b>在座时长</b>。</template><template v-else>。</template></div>
 
         <div class="save-row">
           <n-button type="primary" :loading="saving" :disabled="!dirty || saving" @click="savePlan">
@@ -387,8 +418,10 @@ const weekSkipped = computed(() => sum("restSkipped"));
 .page h2{margin:0 0 14px;font-size:18px}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .stat{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 12px}
-.value{font-size:18px;font-weight:700;color:var(--lav-700)}
-.label{margin-top:4px;font-size:12px;color:var(--muted)}
+.value{font-size:18px;font-weight:700;color:var(--lav-700);font-variant-numeric:tabular-nums}
+.label-row{display:flex;align-items:baseline;justify-content:space-between;gap:6px;margin-top:4px}
+.label{font-size:12px;color:var(--muted)}
+.extra{font-size:10px;color:var(--muted);opacity:.85;white-space:nowrap;font-variant-numeric:tabular-nums}
 .trend{margin-top:18px}
 .trend-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px}
 .section-title{font-size:15px;font-weight:700}
@@ -417,6 +450,8 @@ const weekSkipped = computed(() => sum("restSkipped"));
 .row-value{width:58px;flex:none;text-align:right;color:var(--muted);font-variant-numeric:tabular-nums}
 .switch-title{font-size:13px;font-weight:700}
 .hint{margin-top:3px;font-size:11px;color:var(--muted);line-height:1.5}
+.plan-hint{margin:2px 0 12px;padding:8px 10px;border-radius:10px;background:var(--lav-50);color:var(--lav-700)}
+.plan-hint b{font-weight:700}
 .range-hint{margin:-4px 0 10px}
 .ranges{transition:opacity .2s ease}
 .ranges.off{opacity:.45}

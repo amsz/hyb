@@ -57,6 +57,11 @@ fn default_work_ranges() -> Vec<TimeRange> {
     vec![TimeRange { start: "09:00".into(), end: "18:00".into() }]
 }
 
+/// 键鼠空闲门控默认 30 秒：超过 30 秒没有任何键鼠动作就不计入工作时长
+fn default_active_idle_secs() -> u32 {
+    30
+}
+
 /// 段外/段内判定：左闭右开 `[start, end)`；`start >= end` 的段视为无效（不支持跨午夜）。
 /// `workScheduleEnabled = false` 时恒为段内；没有有效段时 fail-open 视为段内，
 /// 避免配置异常导致休息计划永远不会触发。
@@ -155,7 +160,13 @@ pub struct AppConfig {
     pub short_rest_minutes: u32,
     pub long_rest_every: u32,
     pub long_rest_minutes: u32,
+    /// 离开判定（分钟）：键鼠空闲超过它 → 停止累计“在座时长”，
+    /// 但仍按 `active_idle_secs` 决定是否计入工作时长。
     pub idle_pause_minutes: u32,
+    /// 键鼠空闲门控（秒）：最近一次键鼠输入距今超过该秒数就不计入工作时长。
+    /// 0 = 关闭门控（纯墙钟计时）。
+    #[serde(default = "default_active_idle_secs")]
+    pub active_idle_secs: u32,
     /// 只在工作时间段内执行休息计划（段外工作计时清零）
     #[serde(default = "default_work_schedule_enabled")]
     pub work_schedule_enabled: bool,
@@ -227,6 +238,7 @@ impl Default for AppConfig {
             long_rest_every: 2,
             long_rest_minutes: 10,
             idle_pause_minutes: 5,
+            active_idle_secs: default_active_idle_secs(),
             work_schedule_enabled: false,
             work_ranges: default_work_ranges(),
             pre_remind: false,
@@ -316,7 +328,11 @@ impl AppConfig {
 #[serde(rename_all = "camelCase")]
 pub struct DailyStats {
     pub date: String,
+    /// 有效工作时长（键鼠门控后的累计秒数，决定何时休息）
     pub work_seconds: u64,
+    /// 在座时长（段内、未手动暂停、键鼠空闲未超过 `idlePauseMinutes` 的墙钟秒数）
+    #[serde(default)]
+    pub session_seconds: u64,
     pub rest_completed: u64,
     pub rest_skipped: u64,
     pub keystrokes: u64,
@@ -472,6 +488,10 @@ pub struct TimerState {
     pub animal_id: String,
     /// peek | accompany | focus
     pub presence: String,
+    /// active | idle —— 键鼠活跃度（仅影响是否累加“有效工作时长”）
+    pub activity: String,
+    /// 本轮在座时长（墙钟秒，与是否有键鼠输入无关）
+    pub session_elapsed_secs: u64,
 }
 
 impl Default for TimerState {
@@ -486,6 +506,8 @@ impl Default for TimerState {
             next_rest_in_secs: 50 * 60,
             animal_id: String::new(),
             presence: "peek".into(),
+            activity: "active".into(),
+            session_elapsed_secs: 0,
         }
     }
 }
