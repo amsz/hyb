@@ -37,6 +37,7 @@ const timerChip = computed(() => {
   if (!t) return { main: "—", sub: "", idle: false };
   if (t.state === "paused") return { main: "已暂停", sub: "", idle: false };
   if (t.state === "outsideSchedule") return { main: "时段外已暂停", sub: "", idle: false };
+  if (t.state === "restDay") return { main: "休息日", sub: "", idle: false };
   if (t.state === "animalShowing") {
     return { main: `休息 ${mmss(t.restRemainingSecs)}`, sub: "", idle: false };
   }

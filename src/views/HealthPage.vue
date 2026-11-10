@@ -112,6 +112,17 @@ const savedAt = ref(null);
 const pad2 = (n) => String(n).padStart(2, "0");
 const hhmm = (d) => `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 
+/** 星期日序：1=周一 … 7=周日（与后端 workDays 一致） */
+const DAYS = [
+  { n: 1, label: "一" },
+  { n: 2, label: "二" },
+  { n: 3, label: "三" },
+  { n: 4, label: "四" },
+  { n: 5, label: "五" },
+  { n: 6, label: "六" },
+  { n: 7, label: "日" },
+];
+
 function normalizeRanges(list) {
   const valid = (Array.isArray(list) ? list : [])
     .filter((r) => r?.start && r?.end && r.start < r.end)
@@ -129,6 +140,7 @@ function planFromConfig(c) {
     idlePauseMinutes: c.idlePauseMinutes,
     workScheduleEnabled: c.workScheduleEnabled ?? false,
     workRanges: normalizeRanges(c.workRanges),
+    workDays: [...(c.workDays?.length ? c.workDays : DAYS.map((d) => d.n))].sort((a, b) => a - b),
   };
 }
 
@@ -146,7 +158,8 @@ const dirty = computed(() => {
     p.activeIdleSecs !== saved.activeIdleSecs ||
     p.idlePauseMinutes !== saved.idlePauseMinutes ||
     !!p.workScheduleEnabled !== !!saved.workScheduleEnabled ||
-    JSON.stringify(p.workRanges) !== JSON.stringify(saved.workRanges)
+    JSON.stringify(p.workRanges) !== JSON.stringify(saved.workRanges) ||
+    JSON.stringify(p.workDays) !== JSON.stringify(saved.workDays)
   );
 });
 
@@ -191,6 +204,16 @@ function setRangeEnd(i, e) {
   }
   rangeError.value = "";
   plan.value.workRanges = plan.value.workRanges.map((x, j) => (j === i ? { ...x, end: v } : x));
+}
+function toggleDay(n) {
+  if (!plan.value?.workScheduleEnabled) return;
+  const days = plan.value.workDays;
+  if (days.includes(n)) {
+    if (days.length <= 1) return; // 至少留一天，否则语义变成“每天都休息”
+    plan.value.workDays = days.filter((x) => x !== n);
+  } else {
+    plan.value.workDays = [...days, n].sort((a, b) => a - b);
+  }
 }
 function addRange() {
   if (!plan.value?.workScheduleEnabled) return;
@@ -284,6 +307,24 @@ const weekSkipped = computed(() => sum("restSkipped"));
 
         <!-- 时间段常显：未启用时置灰只读，避免"功能不见了" -->
         <div class="ranges" :class="{ off: !plan.workScheduleEnabled }">
+          <div class="days-row">
+            <span class="row-label">星期</span>
+            <div class="days">
+              <button
+                v-for="d in DAYS"
+                :key="d.n"
+                type="button"
+                class="day-btn"
+                :class="{ on: plan.workDays.includes(d.n) }"
+                :disabled="!plan.workScheduleEnabled || (plan.workDays.length <= 1 && plan.workDays.includes(d.n))"
+                @click="toggleDay(d.n)"
+              >
+                {{ d.label }}
+              </button>
+            </div>
+          </div>
+          <div class="hint days-hint">只在勾选的星期按时段计时；没勾的星期算休息日。</div>
+          <div class="divider" />
           <div v-for="(r, i) in plan.workRanges" :key="i" class="time-row">
             <label>
               开始
@@ -324,12 +365,14 @@ const weekSkipped = computed(() => sum("restSkipped"));
           </button>
           <div v-if="rangeError && plan.workScheduleEnabled" class="range-error">{{ rangeError }}</div>
           <div v-if="!plan.workScheduleEnabled" class="hint range-hint">
-            打开上面的开关后，休息计划只在下面这些时段内计时。
+            打开上面的开关后，休息计划只在上面勾选的星期和这些时段内计时。
           </div>
           <div v-else class="hint range-hint">
             可分上下午多段，例如 9:00-12:00、13:00-18:00。不支持跨午夜。
           </div>
         </div>
+
+        <div class="divider" />
 
         <div class="row">
           <span class="row-label">工作间隔</span>
@@ -456,6 +499,13 @@ const weekSkipped = computed(() => sum("restSkipped"));
 .ranges{transition:opacity .2s ease}
 .ranges.off{opacity:.45}
 .ranges.off input,.ranges.off button{cursor:not-allowed}
+.days-row{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.days{display:flex;gap:6px}
+.days-hint{margin:0 0 10px}
+.divider{height:1px;margin:12px 0;background:var(--border);opacity:.7}
+.day-btn{width:28px;height:26px;padding:0;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--muted);font-size:12px;cursor:pointer}
+.day-btn.on{border-color:var(--lav-500);background:var(--lav-50);color:var(--lav-700);font-weight:700}
+.day-btn:disabled{opacity:.45;cursor:default}
 .time-row{display:flex;align-items:center;gap:10px;margin-bottom:8px;font-size:12px;color:var(--muted)}
 .time-row input{margin-left:6px;padding:4px 8px;border:1px solid var(--border);border-radius:8px;background:var(--key-bg);color:var(--ink);font-size:12px}
 .range-drop{width:24px;height:24px;padding:0;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--muted);cursor:pointer;line-height:1}

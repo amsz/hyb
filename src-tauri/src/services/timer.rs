@@ -19,7 +19,7 @@
 //! 事件：`timer:tick` `rest:start` `rest:end`
 
 use crate::services::{animals, bluelight, windows};
-use crate::state::{in_work_schedule, lock, Shared, TimerState};
+use crate::state::{in_work_schedule, is_work_day, lock, Shared, TimerState};
 use chrono::{Datelike, Timelike};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
@@ -377,10 +377,11 @@ fn tick(app: &tauri::AppHandle, shared: &Shared, dt: u64) -> Result<(), crate::e
         )
     };
 
-    // 工作时间段（休息计划只在段内执行；段外工作计时清零）
-    let in_schedule = {
+    // 工作时间段（休息计划只在段内执行；段外、休息日工作计时清零）
+    let (in_schedule, rest_day) = {
         let guard = lock(shared);
-        in_work_schedule(&guard.config, &chrono::Local::now())
+        let now = chrono::Local::now();
+        (in_work_schedule(&guard.config, &now), !is_work_day(&guard.config, &now))
     };
 
     let idle = idle_seconds();
@@ -405,8 +406,8 @@ fn tick(app: &tauri::AppHandle, shared: &Shared, dt: u64) -> Result<(), crate::e
             // 手动暂停：保留已累计的工作时间，回到段内仍处于暂停态
             guard.timer.state = "paused".into();
         } else if !in_schedule {
-            // 段外：倒计时清零，不累计工作时长（休息不可能在段外自动触发）
-            guard.timer.state = "outsideSchedule".into();
+            // 段外/休息日：倒计时清零，不累计工作时长（休息不可能在段外自动触发）
+            guard.timer.state = if rest_day { "restDay" } else { "outsideSchedule" }.into();
             guard.timer.work_elapsed_secs = 0;
             guard.timer.session_elapsed_secs = 0;
         } else {
@@ -444,7 +445,11 @@ fn tick(app: &tauri::AppHandle, shared: &Shared, dt: u64) -> Result<(), crate::e
     let title = if paused {
         "护眼宝 - 计时已暂停".to_string()
     } else if !in_schedule {
-        "护眼宝 - 时段外，计划已暂停".to_string()
+        if rest_day {
+            "护眼宝 - 今天是休息日".to_string()
+        } else {
+            "护眼宝 - 时段外，计划已暂停".to_string()
+        }
     } else if !active {
         "护眼宝 - 空闲中".to_string()
     } else if pre_remind && remaining > 0 && remaining <= u64::from(pre_secs) {

@@ -10,6 +10,7 @@
 //!   以免与已安装的护眼宝（`top.huyanbao.desktop`）共用 config/热键/计划任务。
 //!   发布时两者都要改回 `top.huyanbao.desktop`。
 use crate::error::{AppError, AppResult};
+use chrono::Datelike;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -57,6 +58,11 @@ fn default_work_ranges() -> Vec<TimeRange> {
     vec![TimeRange { start: "09:00".into(), end: "18:00".into() }]
 }
 
+/// 休息计划的星期默认每天（1=周一 … 7=周日）
+fn default_work_days() -> Vec<u8> {
+    (1..=7).collect()
+}
+
 /// 键鼠空闲门控默认 30 秒：超过 30 秒没有任何键鼠动作就不计入工作时长
 fn default_active_idle_secs() -> u32 {
     30
@@ -69,6 +75,9 @@ pub fn in_work_schedule(cfg: &AppConfig, now: &chrono::DateTime<chrono::Local>) 
     if !cfg.work_schedule_enabled {
         return true;
     }
+    if !is_work_day(cfg, now) {
+        return false; // 休息日：整天都不算段内
+    }
     // "HH:MM" 定长零填充，字符串比较即时间比较
     let now_hm = now.format("%H:%M").to_string();
     let mut any_valid = false;
@@ -80,6 +89,15 @@ pub fn in_work_schedule(cfg: &AppConfig, now: &chrono::DateTime<chrono::Local>) 
         r.start <= now_hm && now_hm < r.end
     });
     inside || !any_valid
+}
+
+/// 今天是否是休息计划的“工作日”（`workDays` 1=周一 … 7=周日）。
+/// 未启用工作时间段、或列表为空时恒为 true（fail-open，避免配置异常把计划永久关掉）。
+pub fn is_work_day(cfg: &AppConfig, now: &chrono::DateTime<chrono::Local>) -> bool {
+    if !cfg.work_schedule_enabled || cfg.work_days.is_empty() {
+        return true;
+    }
+    cfg.work_days.contains(&(now.weekday().number_from_monday() as u8))
 }
 
 #[cfg(test)]
@@ -131,6 +149,25 @@ mod tests {
     }
 
     #[test]
+    fn work_days_gate_the_plan() {
+        // 2024-05-01 是周三（3）
+        let mut c = cfg(true, &[("09:00", "18:00")]);
+        assert!(is_work_day(&c, &at("10:00")));
+        c.work_days = vec![1, 2];
+        assert!(!is_work_day(&c, &at("10:00")));
+        assert!(!in_work_schedule(&c, &at("10:00")));
+        c.work_days = vec![3];
+        assert!(is_work_day(&c, &at("10:00")));
+        // 未启用计划 / 空列表都 fail-open
+        c.work_schedule_enabled = false;
+        c.work_days = vec![1];
+        assert!(is_work_day(&c, &at("10:00")));
+        c.work_schedule_enabled = true;
+        c.work_days = vec![];
+        assert!(is_work_day(&c, &at("10:00")));
+    }
+
+    #[test]
     fn invalid_or_empty_ranges_fail_open() {
         // 跨午夜写法（start >= end）视为无效
         let c = cfg(true, &[("22:00", "02:00")]);
@@ -173,6 +210,9 @@ pub struct AppConfig {
     /// 工作时间段列表（与 eye_schedule_ranges 独立，互不联动）
     #[serde(default = "default_work_ranges")]
     pub work_ranges: Vec<TimeRange>,
+    /// 休息计划只在勾选的星期执行（1=周一 … 7=周日），其余日子算休息日
+    #[serde(default = "default_work_days")]
+    pub work_days: Vec<u8>,
     pub pre_remind: bool,
     pub pre_remind_seconds: u32,
     pub sound_enabled: bool,
@@ -241,6 +281,7 @@ impl Default for AppConfig {
             active_idle_secs: default_active_idle_secs(),
             work_schedule_enabled: false,
             work_ranges: default_work_ranges(),
+            work_days: default_work_days(),
             pre_remind: false,
             pre_remind_seconds: 30,
             sound_enabled: true,
@@ -304,6 +345,13 @@ impl AppConfig {
         // v4：工作时间段（旧配置缺字段时由 serde default 兜底，这里再保证非空）
         if cfg.work_ranges.is_empty() {
             cfg.work_ranges = default_work_ranges();
+        }
+        // v6：工作日勾选（去重排序，空 = 每天）
+        cfg.work_days.retain(|d| (1..=7).contains(d));
+        cfg.work_days.sort_unstable();
+        cfg.work_days.dedup();
+        if cfg.work_days.is_empty() {
+            cfg.work_days = default_work_days();
         }
         // v5：随机/指定合并成“勾选池”：
         //   池里 1 只 = 固定它；多只 = 在它们之间随机；0 只 = 全部随机。
