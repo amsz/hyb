@@ -6,6 +6,7 @@
 //!   services::shortcuts      全局热键（RegisterHotKey 语义）
 //!   services::activity       击键/点击计数（全局输入钩子，仅计数）
 //!   services::animals        宠物库扫描与白名单
+//!   services::embedded_pets 内嵌宠物素材解包（单文件发布包）
 //!   services::petstore       远端宠物仓库（主源 + 镜像 + sha256 校验）
 //!   services::updater        检查更新 / 下载 / 计划任务提权安装
 //!   services::reporter       遥测上报（日报/DAU/新装/截图）
@@ -13,6 +14,7 @@
 pub mod activity;
 pub mod animals;
 pub mod bluelight;
+pub mod embedded_pets;
 pub mod petstore;
 pub mod reporter;
 pub mod shortcuts;

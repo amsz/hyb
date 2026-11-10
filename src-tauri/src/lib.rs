@@ -105,6 +105,9 @@ pub fn run() {
                 state::install_id()
             );
 
+            // 内嵌宠物素材解包（单文件发布包靠它才有宠物；已解过就是一次读文件判断）
+            services::embedded_pets::install();
+
             // 色温 + 蒙层显隐：先建窗口再 refresh，否则 alpha=0 的隐藏会被后续创建覆盖
             let _ = windows::ensure_filter_overlay(&handle);
             bluelight::refresh(&handle, &shared);

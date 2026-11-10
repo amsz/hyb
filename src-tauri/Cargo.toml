@@ -36,6 +36,8 @@ thiserror = "2"
 log = "0.4"
 chrono = { version = "0.4.45", features = ["serde"] }
 uuid = { version = "1", features = ["v4"] }
+# 仓库里的 pets/ 编译期内嵌进 exe（单文件发布包，见 services::embedded_pets）
+include_dir = "0.7"
 
 # 网络 / 压缩
 reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }

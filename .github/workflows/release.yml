@@ -1,0 +1,54 @@
+# 推送 v* 标签（如 v0.2.0）→ 用 package.ps1 打正式版便携 exe → 直接发布到 Release。
+# 只产出一个资产：huyanbao-<version>-win-x64.exe（免安装单文件，宠物素材内嵌在 exe 里）
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write # 创建 release 并上传资产
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # 标签写的就是 exe 里的版本号，防止发错版本
+      - name: 版本校验
+        shell: pwsh
+        run: |
+          $v = (Get-Content package.json -Raw -Encoding UTF8 | ConvertFrom-Json).version
+          if ("v$v" -ne $env:GITHUB_REF_NAME) { throw "tag $env:GITHUB_REF_NAME != v$v (package.json)" }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # 复用上次的 cargo 产物：Tauri 全量构建 10+ 分钟，缓存后只剩增量
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      # 前端 vite + 后端 cargo --release，-Production 把 identifier/数据目录切回原包值
+      - name: 打包
+        run: powershell -ExecutionPolicy Bypass -File package.ps1 -Production
+
+      - name: 重命名资产
+        shell: pwsh
+        run: |
+          $v = (Get-Content package.json -Raw -Encoding UTF8 | ConvertFrom-Json).version
+          New-Item -ItemType Directory -Force out | Out-Null
+          Copy-Item src-tauri/target/release/huyanbao.exe "out/huyanbao-$v-win-x64.exe"
+
+      - name: 发布
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$env:GITHUB_REF_NAME" out/*.exe `
+            --repo "$env:GITHUB_REPOSITORY" --verify-tag --generate-notes `
+            --title "$env:GITHUB_REF_NAME" `
+            --notes "免安装便携版：双击 exe 即可运行（需 WebView2 Runtime）。宠物素材已内嵌在 exe 里，首次启动自动解包，无需另外下载。"
